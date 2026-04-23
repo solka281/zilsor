@@ -70,10 +70,15 @@ function calculatePlayerPower(playerId, callback) {
         totalAttack += charBonuses.attack;
         totalDefense += charBonuses.defense;
         
-        // Элементы
+        // Элементы и эффекты предметов
         const elements = [];
+        const itemEffects = [];
         items.forEach(item => {
           if (item.special_effect) {
+            // Добавляем эффект в список
+            itemEffects.push(item.special_effect);
+            
+            // Элементы для отображения
             if (item.special_effect.includes('fire_element')) elements.push('🔥');
             if (item.special_effect.includes('ice_element')) elements.push('❄️');
             if (item.special_effect.includes('lightning_element')) elements.push('⚡');
@@ -101,6 +106,7 @@ function calculatePlayerPower(playerId, callback) {
           attack: stats.attack,
           defense: stats.defense,
           elements: elements,
+          itemEffects: itemEffects, // Добавляем эффекты предметов
           raceName: player.race_name,
           specialAbility: player.special_ability,
           username: player.username || 'Игрок',

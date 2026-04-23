@@ -375,6 +375,175 @@ function applyItemBonus(player, itemBonus) {
   return itemBonus;
 }
 
+// Применить эффекты рун и предметов в начале хода
+function applyItemEffects(player, itemEffects, battleContext) {
+  if (!itemEffects || itemEffects.length === 0) return;
+  
+  let messages = [];
+  
+  itemEffects.forEach(effect => {
+    if (!effect) return;
+    
+    // Руна жизни - Регенерация HP
+    if (effect.includes('regen_')) {
+      const regenAmount = parseInt(effect.split('_')[1]) || 5;
+      player.currentHP = Math.min(player.maxHP, player.currentHP + regenAmount);
+      messages.push(`💚 Регенерация: +${regenAmount} HP`);
+    }
+    
+    // Руна берсерка - Режим берсерка
+    if (effect === 'berserk_mode' && battleContext) {
+      battleContext.berserkMode = true;
+      messages.push(`😡 Режим берсерка активен!`);
+    }
+    
+    // Руна бессмертия - Шанс выжить
+    if (effect.includes('immortal_chance_') && battleContext) {
+      const chance = parseInt(effect.split('_')[2]) || 5;
+      battleContext.immortalChance = chance;
+    }
+  });
+  
+  return messages.length > 0 ? messages.join('\n') : null;
+}
+
+// Модифицировать урон с учетом эффектов предметов
+function modifyDamageWithItems(damage, itemEffects, isAttacker) {
+  if (!itemEffects || itemEffects.length === 0) return damage;
+  
+  let modifiedDamage = damage;
+  let messages = [];
+  
+  itemEffects.forEach(effect => {
+    if (!effect) return;
+    
+    if (isAttacker) {
+      // Руна берсерка - +50% урона
+      if (effect === 'berserk_mode') {
+        modifiedDamage = Math.floor(modifiedDamage * 1.50);
+        messages.push(`😡 Берсерк: +50% урона`);
+      }
+      
+      // Эффекты урона от оружия
+      if (effect.includes('fire_damage_')) {
+        const bonus = parseInt(effect.split('_')[2]) || 25;
+        modifiedDamage = Math.floor(modifiedDamage * (1 + bonus / 100));
+        messages.push(`🔥 Огненный урон: +${bonus}%`);
+      }
+      
+      if (effect === 'shadow_strike') {
+        if (Math.random() < 0.20) {
+          modifiedDamage = Math.floor(modifiedDamage * 1.5);
+          messages.push(`🌑 Удар из тени!`);
+        }
+      }
+      
+      if (effect.includes('holy_damage_')) {
+        const bonus = parseInt(effect.split('_')[2]) || 50;
+        modifiedDamage = Math.floor(modifiedDamage * (1 + bonus / 100));
+        messages.push(`✨ Святой урон: +${bonus}%`);
+      }
+    } else {
+      // Защитные эффекты
+      // Руна защиты - Снижение урона
+      if (effect.includes('damage_reduction_')) {
+        const reduction = parseInt(effect.split('_')[2]) || 15;
+        modifiedDamage = Math.floor(modifiedDamage * (1 - reduction / 100));
+        messages.push(`🛡️ Снижение урона: -${reduction}%`);
+      }
+      
+      // Руна берсерка - -20% защиты
+      if (effect === 'berserk_mode') {
+        modifiedDamage = Math.floor(modifiedDamage * 1.20);
+        messages.push(`⚠️ Берсерк: -20% защиты`);
+      }
+      
+      // Отражение урона
+      if (effect.includes('damage_reflect_')) {
+        const reflect = parseInt(effect.split('_')[2]) || 30;
+        const reflectedDamage = Math.floor(modifiedDamage * (reflect / 100));
+        messages.push(`⚡ Отражено: ${reflectedDamage} урона`);
+        // Отраженный урон нужно обработать отдельно
+      }
+      
+      // Блокировка
+      if (effect.includes('block_')) {
+        const blockChance = parseInt(effect.split('_')[1]) || 50;
+        if (Math.random() * 100 < blockChance) {
+          modifiedDamage = Math.floor(modifiedDamage * 0.5);
+          messages.push(`🛡️ Блок! -50% урона`);
+        }
+      }
+    }
+  });
+  
+  return {
+    damage: modifiedDamage,
+    message: messages.length > 0 ? messages.join('\n') : null
+  };
+}
+
+// Модифицировать уклонение с учетом эффектов предметов
+function modifyDodgeWithItems(baseDodge, itemEffects) {
+  if (!itemEffects || itemEffects.length === 0) return baseDodge;
+  
+  let dodgeBonus = 0;
+  
+  itemEffects.forEach(effect => {
+    if (!effect) return;
+    
+    // Руна скорости - Бонус к уклонению
+    if (effect.includes('speed_boost_')) {
+      const bonus = parseInt(effect.split('_')[2]) || 25;
+      dodgeBonus += bonus;
+    }
+    
+    // Сапоги теней - Уклонение
+    if (effect.includes('dodge_')) {
+      const bonus = parseInt(effect.split('_')[1]) || 20;
+      dodgeBonus += bonus;
+    }
+  });
+  
+  return baseDodge + (dodgeBonus / 100);
+}
+
+// Модифицировать опыт с учетом эффектов предметов
+function modifyExpWithItems(baseExp, itemEffects) {
+  if (!itemEffects || itemEffects.length === 0) return baseExp;
+  
+  let expMultiplier = 1.0;
+  
+  itemEffects.forEach(effect => {
+    if (!effect) return;
+    
+    // Руна мастера - Бонус к опыту
+    if (effect.includes('exp_boost_')) {
+      const bonus = parseInt(effect.split('_')[2]) || 30;
+      expMultiplier += bonus / 100;
+    }
+  });
+  
+  return Math.floor(baseExp * expMultiplier);
+}
+
+// Проверить срабатывание руны бессмертия
+function checkImmortalityRune(player, itemEffects) {
+  if (!itemEffects || itemEffects.length === 0) return false;
+  
+  for (let effect of itemEffects) {
+    if (effect && effect.includes('immortal_chance_')) {
+      const chance = parseInt(effect.split('_')[2]) || 5;
+      if (Math.random() * 100 < chance) {
+        player.currentHP = 1;
+        return true;
+      }
+    }
+  }
+  
+  return false;
+}
+
 module.exports = {
   applyRaceAbility,
   applyDefensiveAbility,
@@ -382,5 +551,10 @@ module.exports = {
   checkPhoenixRevive,
   applyExpBonus,
   applyStatBonus,
-  applyItemBonus
+  applyItemBonus,
+  applyItemEffects,
+  modifyDamageWithItems,
+  modifyDodgeWithItems,
+  modifyExpWithItems,
+  checkImmortalityRune
 };
