@@ -3714,7 +3714,7 @@ bot.onText(/\/profile/, async (msg) => {
           `❤️ HP: ${stats.hp}\n` +
           `🗡️ Атака: ${stats.attack}\n` +
           `🛡️ Защита: ${stats.defense}\n\n` +
-          `🏆 Статистика:\n` +
+          `🏆 Статистика:::\n` +
           `✅ Побед: ${player.wins}\n` +
           `❌ Поражений: ${player.losses}\n` +
           `📈 Винрейт: ${winRate}%`,
