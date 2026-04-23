@@ -2217,6 +2217,35 @@ bot.onText(/\/speedupraid(?:\s+(.+))?/, async (msg, match) => {
   });
 });
 
+// Админская команда для принудительного обновления квестов
+bot.onText(/\/resetquests/, async (msg) => {
+  const userId = msg.from.id;
+  const username = msg.from.username;
+  
+  // Проверка прав администратора
+  if (username !== config.ADMIN_USERNAME) {
+    return bot.sendMessage(userId, '❌ У вас нет прав для использования этой команды');
+  }
+  
+  bot.sendMessage(userId, '🔄 Начинаю обновление квестов для всех игроков...');
+  
+  dailyQuests.forceResetAllQuests((err, result) => {
+    if (err) {
+      console.error('Ошибка обновления квестов:', err);
+      return bot.sendMessage(userId, `❌ Ошибка обновления квестов: ${err.message}`);
+    }
+    
+    bot.sendMessage(userId, 
+      `✅ *Квесты обновлены!*\n\n` +
+      `👥 Всего игроков: ${result.total}\n` +
+      `✅ Успешно: ${result.success}\n` +
+      `❌ Ошибок: ${result.errors}\n\n` +
+      `Все игроки получили новые ежедневные квесты.`,
+      { parse_mode: 'Markdown' }
+    );
+  });
+});
+
 // Команда для получения информации об игроке
 bot.onText(/\/playerinfo(?:\s+(.+))?/, async (msg, match) => {
   const userId = msg.from.id;
@@ -4726,7 +4755,18 @@ bot.on('callback_query', async (query) => {
           return bot.sendMessage(userId, '❌ Сначала получите расу!', getMainMenu(false));
         }
         
-        // Кулдаун убран - можно заходить в лес без ограничений
+        const cooldown = checkCooldown(player.last_forest_time, 10); // 10 секунд
+        
+        if (!cooldown.ready) {
+          return safeEditMessageText(chatId, messageId, 
+            formatCooldownMessage('Темный лес', cooldown), {
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: '🔙 Назад', callback_data: 'battle_menu' }]
+              ]
+            }
+          });
+        }
         
         let enemy;
         

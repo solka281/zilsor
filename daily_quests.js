@@ -445,11 +445,65 @@ function startDailyQuestsScheduler() {
   console.log('✅ Планировщик ежедневных квестов запущен');
 }
 
+// Принудительное обновление квестов для всех игроков (админская команда)
+function forceResetAllQuests(callback) {
+  console.log('🔄 Принудительное обновление квестов для всех игроков...');
+  
+  // Получаем всех игроков
+  db.all(`SELECT user_id FROM players WHERE race_id IS NOT NULL`, (err, players) => {
+    if (err) {
+      console.error('Ошибка получения списка игроков:', err);
+      return callback(err);
+    }
+    
+    console.log(`📋 Найдено ${players.length} игроков для обновления квестов`);
+    
+    // Удаляем все старые квесты
+    db.run(`DELETE FROM player_daily_quests`, (err) => {
+      if (err) {
+        console.error('Ошибка удаления старых квестов:', err);
+        return callback(err);
+      }
+      
+      console.log('✅ Все старые квесты удалены');
+      
+      // Выдаем новые квесты всем игрокам
+      let processed = 0;
+      let errors = 0;
+      
+      if (players.length === 0) {
+        return callback(null, { total: 0, success: 0, errors: 0 });
+      }
+      
+      players.forEach(player => {
+        assignDailyQuests(player.user_id, (err) => {
+          processed++;
+          if (err) {
+            console.error(`Ошибка выдачи квестов игроку ${player.user_id}:`, err);
+            errors++;
+          }
+          
+          if (processed === players.length) {
+            const success = players.length - errors;
+            console.log(`✅ Квесты обновлены: ${success}/${players.length} игроков`);
+            callback(null, { 
+              total: players.length, 
+              success: success, 
+              errors: errors 
+            });
+          }
+        });
+      });
+    });
+  });
+}
+
 module.exports = {
   DAILY_QUESTS_POOL,
   initializeDailyQuests,
   assignDailyQuests,
   getPlayerDailyQuests,
   updateQuestProgress,
-  startDailyQuestsScheduler
+  startDailyQuestsScheduler,
+  forceResetAllQuests
 };
