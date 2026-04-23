@@ -381,10 +381,75 @@ function updateQuestProgress(playerId, questType, amount, callback) {
     });
 }
 
+// Автоматическое обновление квестов в 00:00 для всех игроков
+function startDailyQuestsScheduler() {
+  console.log('🕐 Запуск планировщика ежедневных квестов...');
+  
+  // Функция проверки и обновления квестов
+  function checkAndResetQuests() {
+    const now = new Date();
+    const hours = now.getHours();
+    const minutes = now.getMinutes();
+    
+    // Проверяем каждую минуту, если 00:00 - обновляем квесты
+    if (hours === 0 && minutes === 0) {
+      console.log('🌅 Полночь! Обновляем ежедневные квесты для всех игроков...');
+      
+      // Получаем всех игроков
+      db.all(`SELECT user_id FROM players WHERE race_id IS NOT NULL`, (err, players) => {
+        if (err) {
+          console.error('Ошибка получения списка игроков:', err);
+          return;
+        }
+        
+        console.log(`📋 Найдено ${players.length} игроков для обновления квестов`);
+        
+        // Удаляем все старые квесты
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayDate = yesterday.toISOString().split('T')[0];
+        
+        db.run(`DELETE FROM player_daily_quests WHERE DATE(assigned_at) <= ?`, 
+          [yesterdayDate], (err) => {
+            if (err) {
+              console.error('Ошибка удаления старых квестов:', err);
+            } else {
+              console.log('✅ Старые квесты удалены');
+            }
+            
+            // Выдаем новые квесты всем игрокам
+            let processed = 0;
+            players.forEach(player => {
+              assignDailyQuests(player.user_id, (err) => {
+                processed++;
+                if (err) {
+                  console.error(`Ошибка выдачи квестов игроку ${player.user_id}:`, err);
+                }
+                
+                if (processed === players.length) {
+                  console.log(`✅ Квесты обновлены для ${players.length} игроков`);
+                }
+              });
+            });
+          });
+      });
+    }
+  }
+  
+  // Проверяем каждую минуту
+  setInterval(checkAndResetQuests, 60 * 1000); // Каждую минуту
+  
+  // Первая проверка сразу при запуске
+  checkAndResetQuests();
+  
+  console.log('✅ Планировщик ежедневных квестов запущен');
+}
+
 module.exports = {
   DAILY_QUESTS_POOL,
   initializeDailyQuests,
   assignDailyQuests,
   getPlayerDailyQuests,
-  updateQuestProgress
+  updateQuestProgress,
+  startDailyQuestsScheduler
 };

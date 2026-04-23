@@ -243,6 +243,7 @@ achievements.initializeAchievements();
 characteristics.initializeCharacteristics();
 potions.initializePotions();
 dailyQuests.initializeDailyQuests();
+dailyQuests.startDailyQuestsScheduler(); // Запускаем автообновление квестов в 00:00
 raids.initializeRaids();
 
 // Запускаем автоматическое создание рейдов
@@ -4725,18 +4726,7 @@ bot.on('callback_query', async (query) => {
           return bot.sendMessage(userId, '❌ Сначала получите расу!', getMainMenu(false));
         }
         
-        const cooldown = checkCooldown(player.last_forest_time, 30); // 30 секунд
-        
-        if (!cooldown.ready) {
-          return safeEditMessageText(chatId, messageId, 
-            formatCooldownMessage('Темный лес', cooldown), {
-            reply_markup: {
-              inline_keyboard: [
-                [{ text: '🔙 Назад', callback_data: 'battle_menu' }]
-              ]
-            }
-          });
-        }
+        // Кулдаун убран - можно заходить в лес без ограничений
         
         let enemy;
         
