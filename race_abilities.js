@@ -548,6 +548,16 @@ module.exports = {
   applyRaceAbility,
   applyDefensiveAbility,
   applyTurnEffects,
+  applyStatBonus,
+  applyItemBonus,
+  applyExpBonus,
+  checkPhoenixRevive,
+  applyItemEffects,
+  modifyDamageWithItems,
+  modifyDodgeWithItems,
+  modifyExpWithItems,
+  checkImmortalityRune
+};
   checkPhoenixRevive,
   applyExpBonus,
   applyStatBonus,

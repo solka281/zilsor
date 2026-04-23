@@ -814,6 +814,8 @@ function getProgressBar(current, total) {
   return bar;
 }
 
+// Функция applyAwakeningBonus удалена - бонусы пробуждения отключены
+
 // Вспомогательная функция для логирования с информацией об игроке
 function logWithPlayer(message, userId, callback) {
   if (!userId) {
@@ -854,7 +856,7 @@ function handleBattleEnd(userId, victory) {
     console.log(`⚔️ Бой найден, враг: ${battle.enemy.name}`);
     
     const enemy = battle.enemy;
-    const goldReward = victory ? enemy.goldReward : Math.floor(enemy.goldReward * 0.2);
+    let goldReward = victory ? enemy.goldReward : Math.floor(enemy.goldReward * 0.2);
     let expReward = victory ? enemy.expReward : Math.floor(enemy.expReward * 0.2);
     
     // Применяем бонус к опыту от способности расы (Адаптация человека)
@@ -862,6 +864,16 @@ function handleBattleEnd(userId, victory) {
       { specialAbility: battle.playerStats.specialAbility },
       expReward
     );
+    
+    // Применяем бонус к опыту от рун (Руна мастера)
+    if (battle.playerStats.itemEffects && battle.playerStats.itemEffects.length > 0) {
+      expReward = raceAbilities.modifyExpWithItems(expReward, battle.playerStats.itemEffects);
+    }
+    
+    // Применяем бонусы пробуждения к золоту и опыту - УДАЛЕНО
+    // const awakeningBonus = applyAwakeningBonus(goldReward, expReward, player.awakening_level);
+    // goldReward = awakeningBonus.gold;
+    // expReward = awakeningBonus.exp;
     
     const crystalReward = victory && enemy.isBoss ? enemy.crystalReward : 0;
     
@@ -880,12 +892,11 @@ function handleBattleEnd(userId, victory) {
               last_forest_time = ?,
               gold = gold + ?,
               exp = exp + ?,
-              awakening_xp = awakening_xp + ?,
               crystals = crystals + ?,
               forest_level = forest_level + ?,
               current_forest_enemy = ?
               WHERE user_id = ?`,
-        [now, goldReward, expReward, expReward, crystalReward, forestLevelUp, clearEnemy, userId],
+        [now, goldReward, expReward, crystalReward, forestLevelUp, clearEnemy, userId],
         (err) => {
           if (err) {
             console.error('❌ Ошибка обновления после боя:', err);
@@ -917,8 +928,7 @@ function handleBattleEnd(userId, victory) {
             
             message += 
               `💰 Золото: +${goldReward} (${currentGold}💰)\n` +
-              `✨ Опыт: +${expReward} (${currentExp}✨)\n` +
-              `🔮 XP пробуждения: +${expReward}\n`;
+              `✨ Опыт: +${expReward} (${currentExp}✨)\n`;
             
             if (crystalReward > 0) {
               message += `💎 Кристаллы: +${crystalReward}\n`;
@@ -1049,22 +1059,16 @@ function conductDuelAndNotify(player1Id, player2Id) {
         const mmrChange = isWinner ? mmrResult.winnerMMRChange : mmrResult.loserMMRChange;
         const newMMR = isWinner ? mmrResult.newWinnerMMR : mmrResult.newLoserMMR;
         const resultText = isWinner ? '🎉 ПОБЕДА!' : '😢 ПОРАЖЕНИЕ';
-        const goldReward = isWinner ? 50 : 10;
-        const expReward = isWinner ? 50 : 10;
-        const awakeningXP = isWinner ? 100 : 20;
         const mmrText = mmrChange > 0 ? `+${mmrChange}` : `${mmrChange}`;
         const mmrColor = mmrChange > 0 ? '📈' : '📉';
         
-        db.run(`UPDATE players SET last_duel_time = ?, gold = gold + ?, exp = exp + ?, awakening_xp = awakening_xp + ? WHERE user_id = ?`,
-          [now, goldReward, expReward, awakeningXP, playerId], () => {
+        db.run(`UPDATE players SET last_duel_time = ? WHERE user_id = ?`,
+          [now, playerId], () => {
             
             bot.sendMessage(playerId,
               `${battleText}\n\n` +
               `━━━━━━━━━━━━━━━━━━━━\n` +
               `${resultText}\n\n` +
-              `💰 Золото: +${goldReward}\n` +
-              `✨ Опыт: +${expReward}\n` +
-              `🔮 XP пробуждения: +${awakeningXP}\n` +
               `🏆 MMR: ${mmrColor} ${mmrText} (${newMMR})\n\n` +
               `⚔️ Раундов: ${duelResult.rounds}`,
               { parse_mode: 'Markdown', ...getMainMenu(true) }
@@ -2296,8 +2300,7 @@ bot.onText(/\/playerinfo(?:\s+(.+))?/, async (msg, match) => {
         `🏆 Побед: ${player.wins}\n` +
         `💀 Поражений: ${player.losses}\n` +
         `🎯 MMR: ${player.mmr || 0}\n\n` +
-        `🌟 Пробуждение: ${player.awakening_level}\n` +
-        `🔮 XP пробуждения: ${player.awakening_xp}`,
+        `🌟 Пробуждение: ${player.awakening_level}\n`,
         { parse_mode: 'Markdown' }
       );
     });
@@ -4705,8 +4708,7 @@ bot.on('callback_query', async (query) => {
               `🏆 Статистика:::\n` +
               `🎯 MMR: ${playerMMR}\n` +
               `${player.wins}W / ${player.losses}L (${winRate}%)\n` +
-              `🌟 Пробуждение: ${player.awakening_level}\n` +
-              `🔮 XP пробуждения: ${player.awakening_xp}/${config.AWAKENING_XP_REQUIRED}`,
+              `🌟 Пробуждение: ${player.awakening_level}\n`,
               getMainMenu(true)
             );
           });
@@ -6130,7 +6132,7 @@ bot.on('callback_query', async (query) => {
             const rarityName = rarityConfig ? rarityConfig.name : 'Обычный';
             const now = Math.floor(Date.now() / 1000);
             
-            db.run(`UPDATE players SET last_loot_time = ?, exp = exp + 10, awakening_xp = awakening_xp + 20 WHERE user_id = ?`, 
+            db.run(`UPDATE players SET last_loot_time = ?, exp = exp + 10 WHERE user_id = ?`, 
               [now, userId], (err) => {
                 if (err) {
                   console.error('Ошибка обновления игрока после loot:', err);
@@ -6155,7 +6157,7 @@ bot.on('callback_query', async (query) => {
                   `${rarityName}\n\n` +
                   `⚡ +${item.power_bonus} | ❤️ +${item.hp_bonus}\n` +
                   `🗡️ +${item.attack_bonus} | 🛡️ +${item.defense_bonus}\n\n` +
-                  `✨ +10 XP | 🔮 +20 XP пробуждения`,
+                  `✨ +10 XP`,
                   getMainMenu(true)
                 );
                 
@@ -7022,24 +7024,11 @@ bot.on('callback_query', async (query) => {
           return bot.sendMessage(userId, '❌ Максимальный уровень!', getMainMenu(true));
         }
         
-        if (player.awakening_xp < config.AWAKENING_XP_REQUIRED) {
-          return bot.sendMessage(userId, 
-            `❌ Недостаточно XP пробуждения!\n\n` +
-            `🔮 ${player.awakening_xp}/${config.AWAKENING_XP_REQUIRED}\n\n` +
-            `💡 Фармите XP через:\n` +
-            `• Дуэли (+100 XP за победу)\n` +
-            `• Квесты (+50-200 XP)\n` +
-            `• Поиск предметов (+20 XP)`,
-            getMainMenu(true)
-          );
-        }
-        
         // Показываем подтверждение с правильной ценой
         safeEditMessageText(chatId, messageId,
           `🌟 *Пробуждение расы*\n\n` +
-          `💰 Стоимость: ${config.AWAKENING_GOLD_COST} золота\n` +
-          `⚡ Бонус: +50 к силе\n` +
-          `🔮 XP пробуждения: ${player.awakening_xp}/${config.AWAKENING_XP_REQUIRED}\n\n` +
+          `� Стоимость: ${config.AWAKENING_GOLD_COST} золота\n` +
+          `⚡ Бонус: +50 к силе\n\n` +
           `💵 Ваше золото: ${player.gold}\n\n` +
           `Пробудить расу?`,
           {
@@ -7065,25 +7054,21 @@ bot.on('callback_query', async (query) => {
           return bot.sendMessage(userId, '❌ Максимальный уровень!', getMainMenu(true));
         }
         
-        if (player.awakening_xp < config.AWAKENING_XP_REQUIRED) {
-          return bot.sendMessage(userId, 
-            `❌ Недостаточно XP пробуждения!\n\n` +
-            `🔮 ${player.awakening_xp}/${config.AWAKENING_XP_REQUIRED}`,
-            getMainMenu(true)
-          );
-        }
-        
         if (player.gold < config.AWAKENING_GOLD_COST) {
           return bot.sendMessage(userId, `❌ Нужно ${config.AWAKENING_GOLD_COST}💰`, getMainMenu(true));
         }
         
-        db.run(`UPDATE players SET gold = gold - ?, awakening_level = awakening_level + 1, awakening_xp = 0, power = power + 50 WHERE user_id = ?`,
+        db.run(`UPDATE players SET gold = gold - ?, awakening_level = awakening_level + 1, power = power + 50 WHERE user_id = ?`,
           [config.AWAKENING_GOLD_COST, userId], () => {
+            const newLevel = player.awakening_level + 1;
+            const newMultiplier = 1 + (newLevel * 0.1);
+            
             bot.sendMessage(userId, 
               `✨ *ПРОБУЖДЕНИЕ!* ✨\n\n` +
-              `🌟 Уровень: ${player.awakening_level + 1}\n` +
-              `⚡ +50 силы\n\n` +
-              `💰 -${config.AWAKENING_GOLD_COST}`,
+              `🌟 Уровень: ${newLevel}\n` +
+              `⚡ +50 силы\n` +
+              `💰 Бонус к золоту и опыту: x${newMultiplier.toFixed(1)}\n\n` +
+              `� -${config.AWAKENING_GOLD_COST} золота`,
               { parse_mode: 'Markdown', ...getMainMenu(true) }
             );
           });
@@ -7127,18 +7112,30 @@ bot.on('callback_query', async (query) => {
           });
         }
         
-        const goldEarned = Math.floor(Math.random() * 100) + 50; // 50-150 золота
-        const expEarned = 20;
+        let goldEarned = Math.floor(Math.random() * 100) + 50; // 50-150 золота
+        let expEarned = 20;
+        
+        // Применяем бонусы пробуждения - УДАЛЕНО
+        // const awakeningBonus = applyAwakeningBonus(goldEarned, expEarned, player.awakening_level);
+        // goldEarned = awakeningBonus.gold;
+        // expEarned = awakeningBonus.exp;
+        
         const now = Math.floor(Date.now() / 1000);
         
         db.run(`UPDATE players SET last_work_time = ?, gold = gold + ?, exp = exp + ? WHERE user_id = ?`,
           [now, goldEarned, expEarned, userId], () => {
-            bot.sendMessage(userId,
-              `💼 Работа выполнена!\n\n` +
+            let workMessage = `💼 Работа выполнена!\n\n` +
               `💰 Заработано: ${goldEarned} золота\n` +
-              `✨ Получено: ${expEarned} опыта\n\n` +
-              `⏰ Следующая работа через: ${formatCooldown(config.WORK_COOLDOWN)}`,
-              getMainMenu(true)
+              `✨ Получено: ${expEarned} опыта\n`;
+            
+            // Показываем множитель если есть пробуждение - УДАЛЕНО
+            // if (player.awakening_level > 0) {
+            //   workMessage += `🌟 Бонус пробуждения: x${awakeningBonus.multiplier.toFixed(1)}\n`;
+            // }
+            
+            workMessage += `\n⏰ Следующая работа через: ${formatCooldown(config.WORK_COOLDOWN)}`;
+            
+            bot.sendMessage(userId, workMessage, getMainMenu(true)
             );
             
             checkLevelUp(userId);
@@ -7215,19 +7212,30 @@ bot.on('callback_query', async (query) => {
           });
         }
         
-        const goldReward = 200;
-        const expReward = 100;
+        let goldReward = 200;
+        let expReward = 100;
+        
+        // Применяем бонусы пробуждения - УДАЛЕНО
+        // const awakeningBonus = applyAwakeningBonus(goldReward, expReward, player.awakening_level);
+        // goldReward = awakeningBonus.gold;
+        // expReward = awakeningBonus.exp;
+        
         const now = Math.floor(Date.now() / 1000);
         
         db.run(`UPDATE players SET last_daily_reward = ?, gold = gold + ?, exp = exp + ? WHERE user_id = ?`,
           [now, goldReward, expReward, userId], () => {
-            bot.sendMessage(userId,
-              `🎁 Ежедневная награда!\n\n` +
+            let rewardMessage = `🎁 Ежедневная награда!\n\n` +
               `💰 +${goldReward} золота\n` +
-              `✨ +${expReward} опыта\n\n` +
-              `⏰ Следующая награда через: 24 часа`,
-              getMainMenu(true)
-            );
+              `✨ +${expReward} опыта\n`;
+            
+            // Показываем множитель если есть пробуждение - УДАЛЕНО
+            // if (player.awakening_level > 0) {
+            //   rewardMessage += `🌟 Бонус пробуждения: x${awakeningBonus.multiplier.toFixed(1)}\n`;
+            // }
+            
+            rewardMessage += `\n⏰ Следующая награда через: 24 часа`;
+            
+            bot.sendMessage(userId, rewardMessage, getMainMenu(true));
             
             checkLevelUp(userId);
             

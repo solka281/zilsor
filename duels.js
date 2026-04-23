@@ -23,10 +23,10 @@ function calculatePlayerPower(playerId, callback) {
     totalDefense += player.level * 1.5;
     totalHP += player.level * 5;
     
-    // Бонусы от пробуждения
-    const awakeningBonus = 1 + (player.awakening_level * 0.1);
-    totalPower *= awakeningBonus;
-    totalAttack *= awakeningBonus;
+    // Бонусы от пробуждения - УДАЛЕНО
+    // const awakeningBonus = 1 + (player.awakening_level * 0.1);
+    // totalPower *= awakeningBonus;
+    // totalAttack *= awakeningBonus;
     
     // Получаем бонусы от экипированных предметов
     db.all(`SELECT i.* FROM inventory inv

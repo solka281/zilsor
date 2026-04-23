@@ -551,6 +551,9 @@ router.post('/buy', (req, res) => {
                           VALUES (?, ?, ?, 'sale', 'item', ?, ?, ?, ?)`,
                     [marketItem.seller_id, userId, buyer.username, marketItem.item_name, sellerReceives, marketItem.currency, commission]);
                   
+                  // Уведомляем продавца о покупке
+                  notifyItemSold(marketItem.seller_id, marketItem.item_name, sellerReceives, marketItem.currency, buyer.username);
+                  
                   res.json({ 
                     success: true, 
                     message: `Предмет куплен! Комиссия: ${commission} ${marketItem.currency === 'gold' ? 'золота' : 'кристаллов'}` 
@@ -862,6 +865,11 @@ router.post('/auction/bid', (req, res) => {
                   
                   db.run('COMMIT');
                   res.json({ success: true, message: 'Ставка принята' });
+                  
+                  // Уведомляем предыдущего лидера что его ставку перебили
+                  if (auction.current_bidder_id && auction.current_bidder_id !== userId) {
+                    notifyBidOutbid(auction.current_bidder_id, auction.item_name, bidAmount, auction.currency);
+                  }
                 });
             });
         });
@@ -870,7 +878,179 @@ router.post('/auction/bid', (req, res) => {
   });
 });
 
+// Функция завершения истекших аукционов
+function completeExpiredAuctions() {
+  console.log('🔍 Проверка истекших аукционов...');
+  
+  db.all(`SELECT * FROM auctions 
+          WHERE status = 'active' AND ends_at <= datetime('now')`, (err, auctions) => {
+    if (err) {
+      console.error('Ошибка получения истекших аукционов:', err);
+      return;
+    }
+    
+    if (!auctions || auctions.length === 0) {
+      return;
+    }
+    
+    console.log(`📦 Найдено ${auctions.length} истекших аукционов`);
+    
+    auctions.forEach(auction => {
+      if (auction.bid_count > 0 && auction.current_bidder_id) {
+        // Есть победитель - передаем предмет
+        console.log(`✅ Аукцион #${auction.id} завершен, победитель: ${auction.current_bidder_name}`);
+        
+        // Начинаем транзакцию
+        db.run('BEGIN TRANSACTION');
+        
+        // Передаем предмет победителю
+        db.run(`UPDATE inventory SET player_id = ? WHERE id = ?`,
+          [auction.current_bidder_id, auction.inventory_id], (err) => {
+            if (err) {
+              console.error('Ошибка передачи предмета:', err);
+              db.run('ROLLBACK');
+              return;
+            }
+            
+            // Передаем деньги продавцу (80% от ставки)
+            const sellerAmount = Math.floor(auction.current_bid * 0.8);
+            const column = auction.currency === 'gold' ? 'gold' : 'crystals';
+            
+            db.run(`UPDATE players SET ${column} = ${column} + ? WHERE user_id = ?`,
+              [sellerAmount, auction.seller_id], (err) => {
+                if (err) {
+                  console.error('Ошибка передачи денег:', err);
+                  db.run('ROLLBACK');
+                  return;
+                }
+                
+                // Обновляем статус аукциона
+                db.run(`UPDATE auctions SET status = 'completed' WHERE id = ?`,
+                  [auction.id], (err) => {
+                    if (err) {
+                      console.error('Ошибка обновления статуса:', err);
+                      db.run('ROLLBACK');
+                      return;
+                    }
+                    
+                    db.run('COMMIT');
+                    console.log(`💰 Аукцион #${auction.id} завершен успешно`);
+                    
+                    // Уведомляем продавца
+                    notifyAuctionSold(auction.seller_id, auction.item_name, sellerAmount, auction.currency, auction.current_bidder_name);
+                    
+                    // Уведомляем победителя
+                    notifyAuctionWon(auction.current_bidder_id, auction.item_name, auction.current_bid, auction.currency);
+                  });
+              });
+          });
+      } else {
+        // Нет ставок - возвращаем предмет продавцу
+        console.log(`❌ Аукцион #${auction.id} завершен без ставок`);
+        
+        db.run(`UPDATE auctions SET status = 'expired' WHERE id = ?`,
+          [auction.id], (err) => {
+            if (err) {
+              console.error('Ошибка обновления статуса:', err);
+            } else {
+              notifyAuctionExpired(auction.seller_id, auction.item_name);
+            }
+          });
+      }
+    });
+  });
+}
+
+// Уведомления через бота
+function notifyBidOutbid(userId, itemName, newBid, currency) {
+  try {
+    const bot = require('./bot');
+    const currencySymbol = currency === 'gold' ? '💰' : '💎';
+    bot.sendMessage(userId, 
+      `⚠️ *Вашу ставку перебили!*\n\n` +
+      `📦 Предмет: ${itemName}\n` +
+      `${currencySymbol} Новая ставка: ${newBid}\n\n` +
+      `Сделайте новую ставку чтобы вернуть лидерство!`,
+      { parse_mode: 'Markdown' }
+    ).catch(err => console.log(`Не удалось отправить уведомление игроку ${userId}`));
+  } catch (e) {
+    console.error('Ошибка отправки уведомления:', e);
+  }
+}
+
+function notifyAuctionSold(sellerId, itemName, amount, currency, buyerName) {
+  try {
+    const bot = require('./bot');
+    const currencySymbol = currency === 'gold' ? '💰' : '💎';
+    bot.sendMessage(sellerId,
+      `✅ *Ваш аукцион завершен!*\n\n` +
+      `📦 Предмет: ${itemName}\n` +
+      `👤 Покупатель: ${buyerName}\n` +
+      `${currencySymbol} Вы получили: ${amount} (комиссия 20%)\n\n` +
+      `Деньги зачислены на ваш счет!`,
+      { parse_mode: 'Markdown' }
+    ).catch(err => console.log(`Не удалось отправить уведомление игроку ${sellerId}`));
+  } catch (e) {
+    console.error('Ошибка отправки уведомления:', e);
+  }
+}
+
+function notifyAuctionWon(winnerId, itemName, amount, currency) {
+  try {
+    const bot = require('./bot');
+    const currencySymbol = currency === 'gold' ? '💰' : '💎';
+    bot.sendMessage(winnerId,
+      `🎉 *Вы выиграли аукцион!*\n\n` +
+      `📦 Предмет: ${itemName}\n` +
+      `${currencySymbol} Ваша ставка: ${amount}\n\n` +
+      `Предмет добавлен в ваш инвентарь!`,
+      { parse_mode: 'Markdown' }
+    ).catch(err => console.log(`Не удалось отправить уведомление игроку ${winnerId}`));
+  } catch (e) {
+    console.error('Ошибка отправки уведомления:', e);
+  }
+}
+
+function notifyAuctionExpired(sellerId, itemName) {
+  try {
+    const bot = require('./bot');
+    bot.sendMessage(sellerId,
+      `⏰ *Аукцион завершен*\n\n` +
+      `📦 Предмет: ${itemName}\n` +
+      `❌ Не было ставок\n\n` +
+      `Предмет остался в вашем инвентаре.`,
+      { parse_mode: 'Markdown' }
+    ).catch(err => console.log(`Не удалось отправить уведомление игроку ${sellerId}`));
+  } catch (e) {
+    console.error('Ошибка отправки уведомления:', e);
+  }
+}
+
+function notifyItemSold(sellerId, itemName, amount, currency, buyerName) {
+  try {
+    const bot = require('./bot');
+    const currencySymbol = currency === 'gold' ? '💰' : '💎';
+    bot.sendMessage(sellerId,
+      `✅ *Ваш предмет куплен!*\n\n` +
+      `📦 Предмет: ${itemName}\n` +
+      `👤 Покупатель: ${buyerName}\n` +
+      `${currencySymbol} Вы получили: ${amount} (комиссия 20%)\n\n` +
+      `Деньги зачислены на ваш счет!`,
+      { parse_mode: 'Markdown' }
+    ).catch(err => console.log(`Не удалось отправить уведомление игроку ${sellerId}`));
+  } catch (e) {
+    console.error('Ошибка отправки уведомления:', e);
+  }
+}
+
+// Запускаем проверку аукционов каждую минуту
+setInterval(completeExpiredAuctions, 60 * 1000);
+
+// Первая проверка через 10 секунд после запуска
+setTimeout(completeExpiredAuctions, 10000);
+
 module.exports = {
   router,
-  initializeMarketplace
+  initializeMarketplace,
+  notifyItemSold
 };

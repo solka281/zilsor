@@ -26,7 +26,9 @@ function createBattle(userId, playerStats, enemy) {
       phoenixRevived: false,
       godShield: 0,
       burnDamage: 0,
-      burnTurns: 0
+      burnTurns: 0,
+      berserkMode: false,
+      immortalChance: 0
     }
   };
   
@@ -69,13 +71,17 @@ function createPvPBattle(player1Id, player1Stats, player2Id, player2Stats) {
         phoenixRevived: false,
         godShield: 0,
         burnDamage: 0,
-        burnTurns: 0
+        burnTurns: 0,
+        berserkMode: false,
+        immortalChance: 0
       },
       player2: {
         phoenixRevived: false,
         godShield: 0,
         burnDamage: 0,
-        burnTurns: 0
+        burnTurns: 0,
+        berserkMode: false,
+        immortalChance: 0
       }
     }
   };
@@ -305,8 +311,12 @@ function executePvPRound(battle) {
 
 // Выполнить атаку
 function performAttack(attacker, defender, battleContext = null) {
-  // Шанс уклонения
-  const dodgeChance = 0.05 + (defender.defense / 1000);
+  // Модифицируем шанс уклонения с учетом рун
+  let dodgeChance = 0.05 + (defender.defense / 1000);
+  if (defender.itemEffects && defender.itemEffects.length > 0) {
+    dodgeChance = raceAbilities.modifyDodgeWithItems(dodgeChance, defender.itemEffects);
+  }
+  
   if (Math.random() < dodgeChance) {
     return { dodged: true, damage: 0 };
   }
@@ -365,6 +375,15 @@ function performAttack(attacker, defender, battleContext = null) {
     }
   }
   
+  // Применяем модификацию урона от рун атакующего
+  if (attacker.itemEffects && attacker.itemEffects.length > 0) {
+    const runeResult = raceAbilities.modifyDamageWithItems(attackResult.damage, attacker.itemEffects, true);
+    attackResult.damage = runeResult.damage;
+    if (runeResult.message) {
+      attackResult.abilityMessage = (attackResult.abilityMessage || '') + '\n' + runeResult.message;
+    }
+  }
+  
   // Разброс урона
   const variance = 0.9 + Math.random() * 0.2;
   attackResult.damage = Math.floor(attackResult.damage * variance);
@@ -383,6 +402,17 @@ function playerTurn(userId, action) {
     battleOver: false,
     victory: false
   };
+  
+  // Применяем эффекты предметов в начале хода (регенерация)
+  const itemEffectMsg = raceAbilities.applyItemEffects(
+    { currentHP: battle.playerHP, maxHP: battle.playerMaxHP },
+    battle.playerStats.itemEffects || [],
+    battle.battleContext
+  );
+  
+  if (itemEffectMsg) {
+    result.itemEffects = itemEffectMsg;
+  }
   
   // Применяем эффекты в начале хода (горение, яды и т.д.)
   const playerEffects = raceAbilities.applyTurnEffects(
@@ -420,7 +450,17 @@ function playerTurn(userId, action) {
         battle.battleContext
       );
       
-      const finalDamage = defenseResult.damage;
+      let finalDamage = defenseResult.damage;
+      
+      // Применяем модификацию урона от рун (защита врага)
+      if (battle.enemy.itemEffects && battle.enemy.itemEffects.length > 0) {
+        const runeResult = raceAbilities.modifyDamageWithItems(finalDamage, battle.enemy.itemEffects, false);
+        finalDamage = runeResult.damage;
+        if (runeResult.message) {
+          attackResult.abilityMessage = (attackResult.abilityMessage || '') + '\n' + runeResult.message;
+        }
+      }
+      
       battle.enemyHP -= finalDamage;
       
       let text = `⚔️ Вы атакуете: ${finalDamage} урона`;
@@ -535,6 +575,15 @@ function playerTurn(userId, action) {
     
     let damage = defenseResult.damage;
     
+    // Применяем модификацию урона от рун игрока (защита)
+    if (battle.playerStats.itemEffects && battle.playerStats.itemEffects.length > 0) {
+      const runeResult = raceAbilities.modifyDamageWithItems(damage, battle.playerStats.itemEffects, false);
+      damage = runeResult.damage;
+      if (runeResult.message) {
+        enemyAttack.abilityMessage = (enemyAttack.abilityMessage || '') + '\n' + runeResult.message;
+      }
+    }
+    
     // Если игрок защищался, урон уменьшается
     if (battle.defending) {
       damage = Math.floor(damage * 0.5);
@@ -557,29 +606,44 @@ function playerTurn(userId, action) {
   
   // Проверка поражения
   if (battle.playerHP <= 0) {
-    // Проверяем возрождение Феникса
-    const playerForRevive = {
-      specialAbility: battle.playerStats.specialAbility,
+    // Проверяем руну бессмертия
+    const playerForImmortal = {
       currentHP: battle.playerHP,
       maxHP: battle.playerMaxHP
     };
     
-    if (raceAbilities.checkPhoenixRevive(playerForRevive, battle.battleContext)) {
-      battle.playerHP = playerForRevive.currentHP;
+    if (raceAbilities.checkImmortalityRune(playerForImmortal, battle.playerStats.itemEffects || [])) {
+      battle.playerHP = 1;
       
-      // Добавляем сообщение о возрождении
+      // Добавляем сообщение о срабатывании руны
       if (result.enemyAction) {
-        result.enemyAction.text += `\n🔥 ВОЗРОЖДЕНИЕ! Феникс восстал из пепла с ${battle.playerHP} HP!`;
-      } else {
-        result.enemyAction = {
-          text: `🔥 ВОЗРОЖДЕНИЕ! Феникс восстал из пепла с ${battle.playerHP} HP!`
-        };
+        result.enemyAction.text += `\n🔮 РУНА БЕССМЕРТИЯ! Вы выжили с 1 HP!`;
       }
     } else {
-      result.battleOver = true;
-      result.victory = false;
-      // НЕ удаляем бой здесь - удалим в handleBattleEnd
-      return result;
+      // Проверяем возрождение Феникса
+      const playerForRevive = {
+        specialAbility: battle.playerStats.specialAbility,
+        currentHP: battle.playerHP,
+        maxHP: battle.playerMaxHP
+      };
+      
+      if (raceAbilities.checkPhoenixRevive(playerForRevive, battle.battleContext)) {
+        battle.playerHP = playerForRevive.currentHP;
+        
+        // Добавляем сообщение о возрождении
+        if (result.enemyAction) {
+          result.enemyAction.text += `\n🔥 ВОЗРОЖДЕНИЕ! Феникс восстал из пепла с ${battle.playerHP} HP!`;
+        } else {
+          result.enemyAction = {
+            text: `🔥 ВОЗРОЖДЕНИЕ! Феникс восстал из пепла с ${battle.playerHP} HP!`
+          };
+        }
+      } else {
+        result.battleOver = true;
+        result.victory = false;
+        // НЕ удаляем бой здесь - удалим в handleBattleEnd
+        return result;
+      }
     }
   }
   
