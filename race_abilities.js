@@ -27,6 +27,7 @@ function applyRaceAbility(attacker, defender, attackResult, battleContext) {
     attacker.currentHP = Math.min(attacker.maxHP, attacker.currentHP + healAmount);
     abilityTriggered = true;
     abilityMessage = `🩸 Кровопийство! +${healAmount} HP`;
+    console.log(`[VAMPIRE] Кровопийство сработало: урон=${attackResult.damage}, лечение=${healAmount}`);
   }
   
   // Феникс - Возрождение: Воскрешение после смерти
@@ -246,6 +247,7 @@ function applyDefensiveAbility(defender, incomingDamage, battleContext) {
     if (Math.random() < 0.30) { // 30% шанс
       damageReduction = Math.floor(incomingDamage * 0.15);
       abilityMessage = `🛡️ Стойкость дварфа! -${damageReduction} урона`;
+      console.log(`[DWARF] Стойкость сработала: входящий урон=${incomingDamage}, снижение=${damageReduction}`);
     }
   }
   
