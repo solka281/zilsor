@@ -2909,8 +2909,8 @@ bot.on('message', (msg) => {
         `4 - 👢 Сапоги (boots)\n` +
         `5 - ⚔️ Оружие (weapon)\n` +
         `6 - 🛡️ Щит (shield)\n` +
-        `7 - 💎 Артефакт 1 (artifact_1)\n` +
-        `8 - 💎 Артефакт 2 (artifact_2)\n` +
+        `7 - 💎 Артефакт (artifact_1)\n` +
+        `8 - � Руна (artifact_2)\n` +
         `9 - 🎒 Аксессуар (accessory)\n\n` +
         `Введите номер (1-9):`
       );
@@ -2929,8 +2929,8 @@ bot.on('message', (msg) => {
     
     const slotNames = {
       helmet: '🪖 Шлем', chest: '🛡️ Нагрудник', legs: '👖 Поножи', boots: '👢 Сапоги',
-      weapon: '⚔️ Оружие', shield: '🛡️ Щит', artifact_1: '💎 Артефакт 1', 
-      artifact_2: '💎 Артефакт 2', accessory: '🎒 Аксессуар'
+      weapon: '⚔️ Оружие', shield: '🛡️ Щит', artifact_1: '💎 Артефакт', 
+      artifact_2: '� Руна', accessory: '🎒 Аксессуар'
     };
     
     bot.sendMessage(userId, 
@@ -3035,8 +3035,8 @@ bot.on('message', (msg) => {
         const rarityIcon = config.RARITY[state.rarity].color;
         const slotNames = {
           helmet: '🪖 Шлем', chest: '🛡️ Нагрудник', legs: '👖 Поножи', boots: '👢 Сапоги',
-          weapon: '⚔️ Оружие', shield: '🛡️ Щит', artifact_1: '💎 Артефакт 1', 
-          artifact_2: '💎 Артефакт 2', accessory: '🎒 Аксессуар'
+          weapon: '⚔️ Оружие', shield: '🛡️ Щит', artifact_1: '💎 Артефакт', 
+          artifact_2: '� Руна', accessory: '🎒 Аксессуар'
         };
         
         bot.sendMessage(userId, 
@@ -4275,7 +4275,7 @@ bot.on('callback_query', async (query) => {
       const rarityName = config.RARITY[item.rarity]?.name || 'Неизвестно';
       const slotIcons = {
         helmet: '🪖', chest: '🛡️', legs: '👖', boots: '👢',
-        weapon: '⚔️', shield: '🛡️', artifact_1: '💎', artifact_2: '💎', accessory: '🎒'
+        weapon: '⚔️', shield: '🛡️', artifact_1: '💎', artifact_2: '�', accessory: '🎒'
       };
       const slotIcon = slotIcons[item.slot] || '❓';
       
@@ -5660,7 +5660,7 @@ bot.on('callback_query', async (query) => {
           const rarityIcon = config.RARITY[item.rarity]?.color || '⚪️';
           const slotIcons = {
             helmet: '🪖', chest: '🛡️', legs: '👖', boots: '👢',
-            weapon: '⚔️', shield: '🛡️', artifact_1: '💎', artifact_2: '💎', accessory: '🎒'
+            weapon: '⚔️', shield: '🛡️', artifact_1: '💎', artifact_2: '�', accessory: '🎒'
           };
           const slotIcon = slotIcons[item.slot] || '❓';
           
@@ -6195,8 +6195,8 @@ bot.on('callback_query', async (query) => {
             boots: '👢 Сапоги',
             weapon: '⚔️ Оружие',
             shield: '🛡️ Щит',
-            artifact_1: '💎 Артефакт 1',
-            artifact_2: '💎 Артефакт 2',
+            artifact_1: '💎 Артефакт',
+            artifact_2: '� Руна',
             accessory: '🎒 Аксессуар'
           };
           
@@ -6341,7 +6341,7 @@ bot.on('callback_query', async (query) => {
             weapon: '⚔️ Оружие',
             shield: '🛡️ Щиты',
             artifact_1: '💎 Артефакты',
-            artifact_2: '💎 Артефакты',
+            artifact_2: '� Руны',
             accessory: '🎒 Аксессуары'
           };
           
@@ -8531,7 +8531,7 @@ bot.on('callback_query', async (query) => {
             weapon: '⚔️ Оружие',
             shield: '🛡️ Щит',
             artifact_1: '💎 Артефакт',
-            artifact_2: '💎 Артефакт',
+            artifact_2: '� Руна',
             accessory: '🎒 Аксессуар'
           };
           
