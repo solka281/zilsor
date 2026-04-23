@@ -558,13 +558,3 @@ module.exports = {
   modifyExpWithItems,
   checkImmortalityRune
 };
-  checkPhoenixRevive,
-  applyExpBonus,
-  applyStatBonus,
-  applyItemBonus,
-  applyItemEffects,
-  modifyDamageWithItems,
-  modifyDodgeWithItems,
-  modifyExpWithItems,
-  checkImmortalityRune
-};
