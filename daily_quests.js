@@ -159,16 +159,16 @@ function assignDailyQuests(playerId, callback) {
   const today = new Date().toISOString().split('T')[0];
   console.log(`📅 Выдача квестов игроку ${playerId} на дату: ${today}`);
   
-  // Получаем информацию об игроке для проверки VIP статуса
-  db.get(`SELECT vip FROM players WHERE user_id = ?`, [playerId], (err, player) => {
+  // Получаем информацию об игроке
+  db.get(`SELECT user_id FROM players WHERE user_id = ?`, [playerId], (err, player) => {
     if (err) {
       console.error('Ошибка получения игрока:', err);
       return callback(err);
     }
     
-    const isVip = player && player.vip === 1;
-    const questCount = isVip ? 5 : 3;
-    console.log(`👤 Игрок ${playerId} ${isVip ? 'VIP' : 'обычный'}, выдаем ${questCount} квестов`);
+    // Все игроки получают 3 квеста (VIP система не реализована)
+    const questCount = 3;
+    console.log(`👤 Игрок ${playerId}, выдаем ${questCount} квестов`);
     
     // Проверяем есть ли уже квесты на сегодня
     db.get(`SELECT COUNT(*) as count FROM player_daily_quests 
