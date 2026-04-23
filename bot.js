@@ -4672,7 +4672,7 @@ bot.on('callback_query', async (query) => {
               `⚔️ Характеристики\n` +
               `⚡ ${stats.power} | ❤️ ${stats.hp}\n` +
               `🗡️ ${stats.attack} | 🛡️ ${stats.defense}${elementsText}\n\n` +
-              `🏆 Статистика\n` +
+              `🏆 Статистика:::\n` +
               `🎯 MMR: ${playerMMR}\n` +
               `${player.wins}W / ${player.losses}L (${winRate}%)\n` +
               `🌟 Пробуждение: ${player.awakening_level}\n` +
