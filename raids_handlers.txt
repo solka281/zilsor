@@ -1,0 +1,242 @@
+    case 'raids_menu':
+      raids.getActiveRaid((err, raid) => {
+        if (err) {
+          console.error('Ошибка получения рейда:', err);
+          return bot.sendMessage(userId, '❌ Ошибка загрузки рейда');
+        }
+        
+        if (!raid) {
+          // Нет активного рейда - создаем новый
+          raids.createRaid((err, newRaid) => {
+            if (err) {
+              console.error('Ошибка создания рейда:', err);
+              return bot.sendMessage(userId, '❌ Ошибка создания рейда');
+            }
+            
+            const timeLeft = Math.floor((new Date(newRaid.ends_at) - new Date()) / 1000 / 60);
+            
+            editImageWithText(chatId, messageId, `raids/${newRaid.image}`,
+              `🐉 *РЕЙД-БОСС*\n\n` +
+              `👹 ${newRaid.name}\n` +
+              `⭐ Уровень: ${newRaid.level}\n` +
+              `📝 ${newRaid.description}\n\n` +
+              `❤️ HP: ${newRaid.current_hp}/${newRaid.hp}\n` +
+              `⏰ Осталось: ${timeLeft} мин\n\n` +
+              `💰 Награды:\n` +
+              `• ${newRaid.rewards.gold_min}-${newRaid.rewards.gold_max} золота\n` +
+              `• ${newRaid.rewards.crystals_min}-${newRaid.rewards.crystals_max} кристаллов\n` +
+              `• ${newRaid.rewards.exp_min}-${newRaid.rewards.exp_max} опыта\n` +
+              `• ${newRaid.rewards.item_chance}% шанс предмета\n\n` +
+              `⚠️ Минимум 2% урона для награды`,
+              {
+                parse_mode: 'Markdown',
+                reply_markup: {
+                  inline_keyboard: [
+                    [{ text: '⚔️ Присоединиться', callback_data: `join_raid_${newRaid.id}` }],
+                    [{ text: '👥 Участники', callback_data: `raid_participants_${newRaid.id}` }],
+                    [{ text: '🔙 Назад', callback_data: 'main_menu' }]
+                  ]
+                }
+              }
+            );
+          });
+        } else {
+          // Есть активный рейд
+          const hpPercent = (raid.current_hp / raid.boss_hp) * 100;
+          const timeLeft = Math.floor((new Date(raid.ends_at) - new Date()) / 1000 / 60);
+          const hpBar = getHPBar(hpPercent);
+          
+          // Проверяем, присоединился ли игрок
+          raids.getPlayerRaidStats(raid.id, userId, (err, stats) => {
+            const hasJoined = !!stats;
+            const buttons = [];
+            
+            if (hasJoined) {
+              buttons.push([{ text: '⚔️ Атаковать', callback_data: `attack_raid_${raid.id}` }]);
+              buttons.push([{ text: '📊 Моя статистика', callback_data: `my_raid_stats_${raid.id}` }]);
+            } else {
+              buttons.push([{ text: '⚔️ Присоединиться', callback_data: `join_raid_${raid.id}` }]);
+            }
+            
+            buttons.push([{ text: '👥 Участники', callback_data: `raid_participants_${raid.id}` }]);
+            buttons.push([{ text: '🔄 Обновить', callback_data: 'raids_menu' }]);
+            buttons.push([{ text: '🔙 Назад', callback_data: 'main_menu' }]);
+            
+            editImageWithText(chatId, messageId, `raids/${raid.boss_image}`,
+              `🐉 *РЕЙД-БОСС*\n\n` +
+              `👹 ${raid.boss_name}\n` +
+              `⭐ Уровень: ${raid.boss_level}\n` +
+              `📝 ${raid.boss_description}\n\n` +
+              `${hpBar}\n` +
+              `❤️ HP: ${raid.current_hp}/${raid.boss_hp} (${hpPercent.toFixed(1)}%)\n` +
+              `⏰ Осталось: ${timeLeft} мин\n\n` +
+              `${hasJoined ? '✅ Вы участвуете в рейде' : '⚠️ Присоединитесь к рейду'}`,
+              {
+                parse_mode: 'Markdown',
+                reply_markup: {
+                  inline_keyboard: buttons
+                }
+              }
+            );
+          });
+        }
+      });
+      break;
+      
+    // Обработчики для рейдов с динамическими ID
+    default:
+      // Присоединиться к рейду
+      if (data.startsWith('join_raid_')) {
+        const raidId = parseInt(data.replace('join_raid_', ''));
+        
+        raids.joinRaid(raidId, userId, (err, result) => {
+          if (err) {
+            return bot.answerCallbackQuery(query.id, { text: '❌ Ошибка присоединения', show_alert: true });
+          }
+          
+          if (result.alreadyJoined) {
+            return bot.answerCallbackQuery(query.id, { text: '✅ Вы уже в рейде!', show_alert: false });
+          }
+          
+          bot.answerCallbackQuery(query.id, { text: '✅ Вы присоединились к рейду!', show_alert: false });
+          
+          // Обновляем меню
+          bot.emit('callback_query', { ...query, data: 'raids_menu' });
+        });
+      }
+      
+      // Атаковать босса
+      else if (data.startsWith('attack_raid_')) {
+        const raidId = parseInt(data.replace('attack_raid_', ''));
+        
+        getOrCreatePlayer(userId, query.from.username, (err, player) => {
+          if (err) {
+            return bot.answerCallbackQuery(query.id, { text: '❌ Ошибка', show_alert: true });
+          }
+          
+          // Рассчитываем силу игрока
+          duels.calculatePlayerPower(userId, (err, stats) => {
+            if (err || !stats) {
+              return bot.answerCallbackQuery(query.id, { text: '❌ Ошибка расчета силы', show_alert: true });
+            }
+            
+            raids.attackBoss(raidId, userId, stats.power, (err, result) => {
+              if (err) {
+                return bot.answerCallbackQuery(query.id, { text: `❌ ${err.message}`, show_alert: true });
+              }
+              
+              if (result.bossDefeated) {
+                // Босс побежден!
+                bot.answerCallbackQuery(query.id, { text: `⚔️ Урон: ${result.damage}\n🏆 БОСС ПОБЕЖДЕН!`, show_alert: true });
+                
+                // Отправляем результаты всем участникам
+                const results = result.results;
+                let topMessage = `🏆 *РЕЙД ЗАВЕРШЕН!*\n\n` +
+                  `👹 ${results.boss_name} (Ур.${results.boss_level}) побежден!\n\n` +
+                  `📊 *ТОП УРОНА:*\n\n`;
+                
+                results.participants.slice(0, 10).forEach((p, index) => {
+                  const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `${index + 1}.`;
+                  topMessage += `${medal} Игрок ${p.player_id}\n`;
+                  topMessage += `   ⚔️ ${p.damage_dealt} урона (${p.damage_percent.toFixed(1)}%)\n`;
+                  topMessage += `   🎁 ${p.gold}💰 ${p.crystals}💎 ${p.exp}✨${p.got_item ? ' 📦' : ''}\n\n`;
+                });
+                
+                // Отправляем топ урона всем участникам
+                results.participants.forEach(p => {
+                  bot.sendMessage(p.player_id, topMessage, { parse_mode: 'Markdown' });
+                  
+                  // Отправляем личные награды
+                  bot.sendMessage(p.player_id,
+                    `🎁 *Ваши награды:*\n\n` +
+                    `💰 +${p.gold} золота\n` +
+                    `💎 +${p.crystals} кристаллов\n` +
+                    `✨ +${p.exp} опыта\n` +
+                    `${p.got_item ? '📦 Получен предмет!' : ''}\n\n` +
+                    `⚔️ Ваш урон: ${p.damage_dealt} (${p.damage_percent.toFixed(1)}%)`,
+                    { parse_mode: 'Markdown' }
+                  );
+                });
+                
+                // Логируем завершение рейда
+                sendLogMessage(
+                  `🏆 Рейд завершен\n` +
+                  `👹 Босс: ${results.boss_name} (Ур.${results.boss_level})\n` +
+                  `👥 Участников: ${results.participants.length}\n` +
+                  `⚔️ Урон: ${results.total_damage}`,
+                  'SUCCESS'
+                );
+                
+                // Обновляем меню (покажет создание нового рейда)
+                setTimeout(() => {
+                  bot.emit('callback_query', { ...query, data: 'raids_menu' });
+                }, 2000);
+              } else {
+                // Босс еще жив
+                bot.answerCallbackQuery(query.id, { 
+                  text: `⚔️ Урон: ${result.damage}\n❤️ HP босса: ${result.currentHp}/${result.maxHp}`, 
+                  show_alert: false 
+                });
+                
+                // Обновляем меню
+                bot.emit('callback_query', { ...query, data: 'raids_menu' });
+              }
+            });
+          });
+        });
+      }
+      
+      // Показать участников рейда
+      else if (data.startsWith('raid_participants_')) {
+        const raidId = parseInt(data.replace('raid_participants_', ''));
+        
+        raids.getRaidParticipants(raidId, (err, participants) => {
+          if (err || !participants || participants.length === 0) {
+            return bot.answerCallbackQuery(query.id, { text: 'Пока нет участников', show_alert: true });
+          }
+          
+          let message = `👥 *Участники рейда*\n\n`;
+          
+          participants.slice(0, 20).forEach((p, index) => {
+            const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `${index + 1}.`;
+            message += `${medal} ${p.display_name || p.username || `Игрок ${p.player_id}`}\n`;
+            message += `   ⚔️ ${p.damage_dealt} урона | 🎯 ${p.attacks_count} атак\n\n`;
+          });
+          
+          if (participants.length > 20) {
+            message += `\n...и еще ${participants.length - 20} участников`;
+          }
+          
+          safeEditMessageText(chatId, messageId, message, {
+            parse_mode: 'Markdown',
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: '🔙 Назад к рейду', callback_data: 'raids_menu' }]
+              ]
+            }
+          });
+        });
+      }
+      
+      // Показать статистику игрока в рейде
+      else if (data.startsWith('my_raid_stats_')) {
+        const raidId = parseInt(data.replace('my_raid_stats_', ''));
+        
+        raids.getPlayerRaidStats(raidId, userId, (err, stats) => {
+          if (err || !stats) {
+            return bot.answerCallbackQuery(query.id, { text: 'Статистика не найдена', show_alert: true });
+          }
+          
+          raids.getActiveRaid((err, raid) => {
+            if (!raid) return;
+            
+            const damagePercent = (stats.damage_dealt / raid.boss_hp) * 100;
+            
+            bot.answerCallbackQuery(query.id, {
+              text: `📊 Ваша статистика:\n⚔️ Урон: ${stats.damage_dealt} (${damagePercent.toFixed(2)}%)\n🎯 Атак: ${stats.attacks_count}`,
+              show_alert: true
+            });
+          });
+        });
+      }
+      break;

@@ -1,0 +1,16 @@
+Задеплойте изменения:
+
+railway up
+
+или
+
+git add bot.js
+git commit -m "Добавлено логирование callback"
+git push
+
+После деплоя:
+1. Нажмите "Битвы" → "Дуэль" → "Найти дуэль"
+2. Проверьте логи - должно появиться:
+   📥 Получен callback: data="start_matchmaking", userId=...
+   🔀 Обработка switch для data="start_matchmaking"
+   🎯 Игрок ... нажал "Найти дуэль"

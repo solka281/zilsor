@@ -1,0 +1,24 @@
+{
+  "name": "telegram-race-game-bot",
+  "version": "1.0.0",
+  "description": "Telegram bot with race game system",
+  "main": "bot.js",
+  "engines": {
+    "node": ">=18.x"
+  },
+  "scripts": {
+    "start": "node bot.js",
+    "dev": "nodemon bot.js",
+    "build": "npm install"
+  },
+  "dependencies": {
+    "node-telegram-bot-api": "^0.66.0",
+    "sqlite3": "^5.1.7",
+    "pg": "^8.11.3",
+    "express": "^4.18.2",
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}

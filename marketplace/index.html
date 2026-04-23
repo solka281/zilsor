@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Маркетплейс - Zilsor Race</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="app">
+        <header class="header">
+            <h1>🏪 Маркетплейс</h1>
+            <div class="user-balance">
+                <span id="gold-balance">💰 0</span>
+                <span id="crystal-balance">💎 0</span>
+            </div>
+        </header>
+
+        <nav class="nav-tabs">
+            <button class="tab-btn active" data-tab="marketplace">🛒 Магазин</button>
+            <button class="tab-btn" data-tab="auctions">⚡ Аукционы</button>
+            <button class="tab-btn" data-tab="currencies">💰 Валюты</button>
+            <button class="tab-btn" data-tab="inventory">🎒 Инвентарь</button>
+            <button class="tab-btn" data-tab="my-sales">📦 Мои продажи</button>
+            <button class="tab-btn" data-tab="history">📋 История</button>
+        </nav>
+
+        <main class="main-content">
+            <div id="marketplace-tab" class="tab-content active">
+                <div class="filters">
+                    <select id="item-filter">
+                        <option value="all">Все предметы</option>
+                        <option value="weapon">⚔️ Оружие</option>
+                        <option value="armor">🛡️ Броня</option>
+                        <option value="artifact">💍 Артефакты</option>
+                    </select>
+                    <select id="rarity-filter">
+                        <option value="all">Все редкости</option>
+                        <option value="COMMON">⚪ Обычные</option>
+                        <option value="RARE">🔵 Редкие</option>
+                        <option value="EPIC">🟣 Эпические</option>
+                        <option value="MYTHIC">🔴 Мифические</option>
+                        <option value="LEGENDARY">🟡 Легендарные</option>
+                    </select>
+                </div>
+                <div id="marketplace-items" class="items-grid"></div>
+            </div>
+
+            <div id="inventory-tab" class="tab-content">
+                <div id="inventory-items" class="items-grid"></div>
+            </div>
+
+            <div id="auctions-tab" class="tab-content">
+                <div id="auctions-items" class="items-grid"></div>
+            </div>
+
+            <div id="currencies-tab" class="tab-content">
+                <div class="sell-currency-section">
+                    <h3>💰 Продать валюту</h3>
+                    <div class="currency-sell-form">
+                        <select id="currency-type-sell">
+                            <option value="gold">💰 Золото (мин. 1000)</option>
+                            <option value="crystals">💎 Кристаллы (мин. 1)</option>
+                        </select>
+                        <input type="number" id="currency-amount" placeholder="Количество" min="1">
+                        <input type="number" id="currency-price" placeholder="Цена за единицу" min="1">
+                        <button class="btn btn-primary" onclick="sellCurrency()">Выставить на продажу</button>
+                    </div>
+                </div>
+                <h3>💎 Валюты на продаже</h3>
+                <div id="currencies-items" class="items-grid"></div>
+            </div>
+
+            <div id="my-sales-tab" class="tab-content">
+                <div id="my-sales-items" class="items-grid"></div>
+            </div>
+
+            <div id="history-tab" class="tab-content">
+                <div class="filters">
+                    <select id="history-filter">
+                        <option value="all">Вся история</option>
+                        <option value="purchases">🛒 Покупки</option>
+                        <option value="sales">💰 Продажи</option>
+                    </select>
+                </div>
+                <div id="history-items" class="history-list"></div>
+            </div>
+        </main>
+    </div>
+
+    <div id="item-modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <div id="item-details"></div>
+        </div>
+    </div>
+
+    <div id="sell-modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h3>💰 Продать предмет</h3>
+            <div id="sell-item-info"></div>
+            <div class="sell-form">
+                <label>Тип продажи:</label>
+                <div class="sale-type-choice">
+                    <label><input type="radio" name="sale-type" value="direct" checked> 💰 Прямая продажа</label>
+                    <label><input type="radio" name="sale-type" value="auction"> ⚡ Аукцион</label>
+                </div>
+                <div id="direct-sale-options">
+                    <label>Цена:</label>
+                    <input type="number" id="sell-price" placeholder="Введите цену" min="1">
+                    <div class="currency-choice">
+                        <label><input type="radio" name="currency" value="gold" checked> 💰 Золото</label>
+                        <label><input type="radio" name="currency" value="crystals"> 💎 Кристаллы</label>
+                    </div>
+                </div>
+                <div id="auction-options" style="display: none;">
+                    <label>Начальная цена:</label>
+                    <input type="number" id="auction-start-price" placeholder="Начальная цена" min="1">
+                    <div class="currency-choice">
+                        <label><input type="radio" name="auction-currency" value="gold" checked> 💰 Золото</label>
+                        <label><input type="radio" name="auction-currency" value="crystals"> 💎 Кристаллы</label>
+                    </div>
+                    <label>Длительность:</label>
+                    <select id="auction-duration">
+                        <option value="1">1 час</option>
+                        <option value="3">3 часа</option>
+                        <option value="6">6 часов</option>
+                        <option value="12">12 часов</option>
+                        <option value="24">24 часа</option>
+                    </select>
+                </div>
+                <button id="sell-btn" class="btn btn-primary">Выставить на продажу</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="auction-modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h3>⚡ Сделать ставку</h3>
+            <div id="auction-details"></div>
+            <div class="bid-form">
+                <label>Ваша ставка:</label>
+                <input type="number" id="bid-amount" placeholder="Введите ставку" min="1">
+                <button id="bid-btn" class="btn btn-primary">Сделать ставку</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
