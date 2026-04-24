@@ -2,6 +2,8 @@ const db = require('./database_simple');
 const config = require('./config');
 const raceAbilities = require('./race_abilities');
 const characteristics = require('./characteristics');
+const speedSystem = require('./speed_system');
+const elementalSystem = require('./elemental_system');
 
 // Рассчитать силу игрока
 function calculatePlayerPower(playerId, callback) {
@@ -94,10 +96,15 @@ function calculatePlayerPower(playerId, callback) {
           maxHP: Math.floor(totalHP),
           attack: Math.floor(totalAttack),
           defense: Math.floor(totalDefense),
-          specialAbility: player.special_ability
+          specialAbility: player.special_ability,
+          race: player.race_name,
+          level: player.level
         };
         
         stats = raceAbilities.applyStatBonus(stats);
+        
+        // Рассчитываем скорость
+        const speedData = speedSystem.calculatePlayerSpeed(stats, itemEffects);
         
         callback(null, {
           power: stats.power,
@@ -105,6 +112,8 @@ function calculatePlayerPower(playerId, callback) {
           maxHP: stats.maxHP,
           attack: stats.attack,
           defense: stats.defense,
+          speed: speedData.totalSpeed,
+          speedBreakdown: speedData,
           elements: elements,
           itemEffects: itemEffects, // Добавляем эффекты предметов
           raceName: player.race_name,

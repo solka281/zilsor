@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Тест уведомлений</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .container { max-width: 500px; margin: 0 auto; }
+        input, button { padding: 10px; margin: 5px; width: 100%; }
+        .result { margin-top: 20px; padding: 10px; border-radius: 5px; }
+        .success { background-color: #d4edda; color: #155724; }
+        .error { background-color: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Тест уведомлений маркетплейса</h1>
+        
+        <div>
+            <label for="userId">User ID (ваш Telegram ID):</label>
+            <input type="text" id="userId" placeholder="Введите ваш Telegram ID">
+            <button onclick="testNotification()">Отправить тестовое уведомление</button>
+        </div>
+        
+        <div id="result"></div>
+        
+        <div style="margin-top: 30px;">
+            <h3>Как узнать свой Telegram ID:</h3>
+            <ol>
+                <li>Напишите боту любое сообщение</li>
+                <li>Посмотрите в логи сервера - там будет ваш ID</li>
+                <li>Или используйте @userinfobot в Telegram</li>
+            </ol>
+        </div>
+    </div>
+
+    <script>
+        async function testNotification() {
+            const userId = document.getElementById('userId').value;
+            const resultDiv = document.getElementById('result');
+            
+            if (!userId) {
+                resultDiv.innerHTML = '<div class="error">Введите User ID</div>';
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/marketplace/test-notification', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ userId: userId })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    resultDiv.innerHTML = '<div class="success">✅ ' + data.message + '</div>';
+                } else {
+                    resultDiv.innerHTML = '<div class="error">❌ ' + data.message + '</div>';
+                }
+            } catch (error) {
+                resultDiv.innerHTML = '<div class="error">❌ Ошибка: ' + error.message + '</div>';
+            }
+        }
+    </script>
+</body>
+</html>

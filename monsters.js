@@ -23,9 +23,9 @@ const MONSTERS_BY_LOCATION = {
     {
       name: 'Слизень',
       emoji: '🟢',
-      hp: 50,
-      attack: 15,
-      defense: 5,
+      hp: 25,
+      attack: 8,
+      defense: 3,
       goldReward: [10, 25],
       expReward: [15, 30],
       specialAbility: 'Липкая атака'
@@ -33,9 +33,9 @@ const MONSTERS_BY_LOCATION = {
     {
       name: 'Большой Слизень',
       emoji: '🟢',
-      hp: 60,
-      attack: 17,
-      defense: 6,
+      hp: 28,
+      attack: 9,
+      defense: 3,
       goldReward: [12, 27],
       expReward: [17, 32],
       specialAbility: 'Ядовитая слизь'
@@ -43,9 +43,9 @@ const MONSTERS_BY_LOCATION = {
     {
       name: 'Гигантский Слизень',
       emoji: '🟢',
-      hp: 70,
-      attack: 20,
-      defense: 8,
+      hp: 30,
+      attack: 10,
+      defense: 4,
       goldReward: [15, 30],
       expReward: [20, 35],
       specialAbility: 'Поглощение'
@@ -57,9 +57,9 @@ const MONSTERS_BY_LOCATION = {
     {
       name: 'Лесной Волк',
       emoji: '🐺',
-      hp: 100,
-      attack: 30,
-      defense: 15,
+      hp: 45,
+      attack: 15,
+      defense: 8,
       goldReward: [25, 50],
       expReward: [30, 55],
       specialAbility: 'Укус'
@@ -67,9 +67,9 @@ const MONSTERS_BY_LOCATION = {
     {
       name: 'Серый Волк',
       emoji: '🐺',
-      hp: 110,
-      attack: 32,
-      defense: 16,
+      hp: 48,
+      attack: 16,
+      defense: 9,
       goldReward: [27, 52],
       expReward: [32, 57],
       specialAbility: 'Свирепый укус'
@@ -77,9 +77,9 @@ const MONSTERS_BY_LOCATION = {
     {
       name: 'Дикий Волк',
       emoji: '🐺',
-      hp: 120,
-      attack: 35,
-      defense: 18,
+      hp: 50,
+      attack: 17,
+      defense: 10,
       goldReward: [30, 55],
       expReward: [35, 60],
       specialAbility: 'Разрывающий укус'
@@ -91,9 +91,9 @@ const MONSTERS_BY_LOCATION = {
     {
       name: 'Орк',
       emoji: '👹',
-      hp: 180,
-      attack: 50,
-      defense: 25,
+      hp: 70,
+      attack: 22,
+      defense: 12,
       goldReward: [50, 90],
       expReward: [60, 95],
       specialAbility: 'Мощный удар'
@@ -101,9 +101,9 @@ const MONSTERS_BY_LOCATION = {
     {
       name: 'Орк-Воин',
       emoji: '👹',
-      hp: 190,
-      attack: 52,
-      defense: 26,
+      hp: 73,
+      attack: 23,
+      defense: 13,
       goldReward: [52, 92],
       expReward: [62, 97],
       specialAbility: 'Боевой топор'
@@ -111,9 +111,9 @@ const MONSTERS_BY_LOCATION = {
     {
       name: 'Орк-Берсерк',
       emoji: '👹',
-      hp: 200,
-      attack: 55,
-      defense: 28,
+      hp: 75,
+      attack: 24,
+      defense: 14,
       goldReward: [55, 95],
       expReward: [65, 100],
       specialAbility: 'Ярость берсерка'
@@ -125,9 +125,9 @@ const MONSTERS_BY_LOCATION = {
     {
       name: 'Скелет-Воин',
       emoji: '💀',
-      hp: 250,
-      attack: 70,
-      defense: 35,
+      hp: 95,
+      attack: 32,
+      defense: 18,
       goldReward: [80, 130],
       expReward: [90, 135],
       specialAbility: 'Костяной удар'
@@ -135,9 +135,9 @@ const MONSTERS_BY_LOCATION = {
     {
       name: 'Скелет-Рыцарь',
       emoji: '💀',
-      hp: 260,
-      attack: 73,
-      defense: 37,
+      hp: 98,
+      attack: 33,
+      defense: 19,
       goldReward: [83, 133],
       expReward: [93, 138],
       specialAbility: 'Мертвая хватка'
@@ -145,9 +145,9 @@ const MONSTERS_BY_LOCATION = {
     {
       name: 'Скелет-Чемпион',
       emoji: '💀',
-      hp: 280,
-      attack: 80,
-      defense: 40,
+      hp: 100,
+      attack: 34,
+      defense: 20,
       goldReward: [90, 145],
       expReward: [100, 150],
       specialAbility: 'Проклятый меч'
@@ -159,9 +159,9 @@ const MONSTERS_BY_LOCATION = {
     {
       name: 'Огненный Элементаль',
       emoji: '🔥',
-      hp: 320,
-      attack: 95,
-      defense: 45,
+      hp: 120,
+      attack: 48,
+      defense: 28,
       goldReward: [110, 170],
       expReward: [120, 175],
       specialAbility: 'Огненный шар'
@@ -169,9 +169,9 @@ const MONSTERS_BY_LOCATION = {
     {
       name: 'Пылающий Элементаль',
       emoji: '🔥',
-      hp: 340,
-      attack: 98,
-      defense: 47,
+      hp: 123,
+      attack: 49,
+      defense: 29,
       goldReward: [113, 173],
       expReward: [123, 178],
       specialAbility: 'Огненная волна'
@@ -179,9 +179,9 @@ const MONSTERS_BY_LOCATION = {
     {
       name: 'Инферно Элементаль',
       emoji: '🔥',
-      hp: 350,
-      attack: 100,
-      defense: 50,
+      hp: 125,
+      attack: 50,
+      defense: 30,
       goldReward: [120, 185],
       expReward: [130, 190],
       specialAbility: 'Адское пламя'
@@ -193,9 +193,9 @@ const MONSTERS_BY_LOCATION = {
     {
       name: 'Ледяной Элементаль',
       emoji: '❄️',
-      hp: 420,
-      attack: 115,
-      defense: 60,
+      hp: 150,
+      attack: 68,
+      defense: 40,
       goldReward: [140, 210],
       expReward: [150, 215],
       specialAbility: 'Ледяной шип'
@@ -203,9 +203,9 @@ const MONSTERS_BY_LOCATION = {
     {
       name: 'Морозный Элементаль',
       emoji: '❄️',
-      hp: 440,
-      attack: 118,
-      defense: 62,
+      hp: 153,
+      attack: 69,
+      defense: 41,
       goldReward: [143, 213],
       expReward: [153, 218],
       specialAbility: 'Ледяная буря'
@@ -213,9 +213,9 @@ const MONSTERS_BY_LOCATION = {
     {
       name: 'Кристальный Элементаль',
       emoji: '❄️',
-      hp: 450,
-      attack: 125,
-      defense: 70,
+      hp: 155,
+      attack: 70,
+      defense: 42,
       goldReward: [150, 225],
       expReward: [160, 230],
       specialAbility: 'Морозное дыхание'
@@ -227,9 +227,9 @@ const MONSTERS_BY_LOCATION = {
     {
       name: 'Молодой Дракон',
       emoji: '🐉',
-      hp: 520,
-      attack: 140,
-      defense: 75,
+      hp: 180,
+      attack: 95,
+      defense: 55,
       goldReward: [170, 250],
       expReward: [180, 255],
       specialAbility: 'Огненное дыхание'
@@ -237,9 +237,9 @@ const MONSTERS_BY_LOCATION = {
     {
       name: 'Красный Дракон',
       emoji: '🐉',
-      hp: 540,
-      attack: 145,
-      defense: 78,
+      hp: 183,
+      attack: 96,
+      defense: 56,
       goldReward: [175, 255],
       expReward: [185, 260],
       specialAbility: 'Драконья ярость'
@@ -247,9 +247,9 @@ const MONSTERS_BY_LOCATION = {
     {
       name: 'Боевой Дракон',
       emoji: '🐉',
-      hp: 560,
-      attack: 150,
-      defense: 80,
+      hp: 185,
+      attack: 97,
+      defense: 57,
       goldReward: [180, 265],
       expReward: [190, 270],
       specialAbility: 'Пламенный вихрь'
@@ -261,9 +261,9 @@ const MONSTERS_BY_LOCATION = {
     {
       name: 'Теневой Убийца',
       emoji: '🥷',
-      hp: 580,
-      attack: 165,
-      defense: 85,
+      hp: 220,
+      attack: 125,
+      defense: 70,
       goldReward: [200, 290],
       expReward: [210, 295],
       specialAbility: 'Удар из тени'
@@ -271,9 +271,9 @@ const MONSTERS_BY_LOCATION = {
     {
       name: 'Теневой Ассасин',
       emoji: '🥷',
-      hp: 600,
-      attack: 170,
-      defense: 88,
+      hp: 223,
+      attack: 126,
+      defense: 71,
       goldReward: [205, 295],
       expReward: [215, 300],
       specialAbility: 'Теневая магия'
@@ -281,9 +281,9 @@ const MONSTERS_BY_LOCATION = {
     {
       name: 'Мастер Теней',
       emoji: '🥷',
-      hp: 620,
-      attack: 175,
-      defense: 90,
+      hp: 225,
+      attack: 127,
+      defense: 72,
       goldReward: [210, 305],
       expReward: [220, 310],
       specialAbility: 'Кошмарное видение'
@@ -295,9 +295,9 @@ const MONSTERS_BY_LOCATION = {
     {
       name: 'Архидемон',
       emoji: '👿',
-      hp: 680,
-      attack: 190,
-      defense: 95,
+      hp: 260,
+      attack: 155,
+      defense: 88,
       goldReward: [230, 330],
       expReward: [240, 335],
       specialAbility: 'Огненный укус'
@@ -305,9 +305,9 @@ const MONSTERS_BY_LOCATION = {
     {
       name: 'Демон-Воин',
       emoji: '👿',
-      hp: 700,
-      attack: 195,
-      defense: 98,
+      hp: 263,
+      attack: 156,
+      defense: 89,
       goldReward: [235, 335],
       expReward: [245, 340],
       specialAbility: 'Темная магия'
@@ -315,9 +315,9 @@ const MONSTERS_BY_LOCATION = {
     {
       name: 'Демон-Лорд',
       emoji: '👿',
-      hp: 720,
-      attack: 200,
-      defense: 100,
+      hp: 265,
+      attack: 157,
+      defense: 90,
       goldReward: [240, 345],
       expReward: [250, 350],
       specialAbility: 'Адский огонь'
@@ -329,8 +329,8 @@ const MONSTERS_BY_LOCATION = {
     {
       name: 'Аватар Хаоса',
       emoji: '☠️',
-      hp: 780,
-      attack: 215,
+      hp: 300,
+      attack: 185,
       defense: 105,
       goldReward: [260, 370],
       expReward: [270, 375],
@@ -339,9 +339,9 @@ const MONSTERS_BY_LOCATION = {
     {
       name: 'Жрец Хаоса',
       emoji: '☠️',
-      hp: 800,
-      attack: 220,
-      defense: 108,
+      hp: 303,
+      attack: 186,
+      defense: 106,
       goldReward: [265, 375],
       expReward: [275, 380],
       specialAbility: 'Конец света'
@@ -349,9 +349,9 @@ const MONSTERS_BY_LOCATION = {
     {
       name: 'Вестник Хаоса',
       emoji: '☠️',
-      hp: 820,
-      attack: 225,
-      defense: 110,
+      hp: 305,
+      attack: 187,
+      defense: 107,
       goldReward: [270, 385],
       expReward: [280, 390],
       specialAbility: 'Хаотический взрыв'
@@ -363,9 +363,9 @@ const MONSTERS_BY_LOCATION = {
     {
       name: 'Каменный Титан',
       emoji: '🗿',
-      hp: 880,
-      attack: 240,
-      defense: 115,
+      hp: 350,
+      attack: 215,
+      defense: 120,
       goldReward: [290, 410],
       expReward: [300, 415],
       specialAbility: 'Удар титана'
@@ -373,9 +373,9 @@ const MONSTERS_BY_LOCATION = {
     {
       name: 'Боевой Титан',
       emoji: '🗿',
-      hp: 900,
-      attack: 245,
-      defense: 118,
+      hp: 353,
+      attack: 216,
+      defense: 121,
       goldReward: [295, 415],
       expReward: [305, 420],
       specialAbility: 'Разрушительная волна'
@@ -383,9 +383,9 @@ const MONSTERS_BY_LOCATION = {
     {
       name: 'Древний Титан',
       emoji: '🗿',
-      hp: 920,
-      attack: 250,
-      defense: 120,
+      hp: 355,
+      attack: 217,
+      defense: 122,
       goldReward: [300, 425],
       expReward: [310, 430],
       specialAbility: 'Землетрясение'
@@ -397,9 +397,9 @@ const MONSTERS_BY_LOCATION = {
     {
       name: 'Страж Бездны',
       emoji: '👁️',
-      hp: 980,
-      attack: 265,
-      defense: 125,
+      hp: 400,
+      attack: 245,
+      defense: 140,
       goldReward: [320, 450],
       expReward: [330, 455],
       specialAbility: 'Взгляд бездны'
@@ -407,9 +407,9 @@ const MONSTERS_BY_LOCATION = {
     {
       name: 'Ужас Бездны',
       emoji: '👁️',
-      hp: 1000,
-      attack: 270,
-      defense: 128,
+      hp: 403,
+      attack: 246,
+      defense: 141,
       goldReward: [325, 455],
       expReward: [335, 460],
       specialAbility: 'Бездна поглощает все'
@@ -417,9 +417,9 @@ const MONSTERS_BY_LOCATION = {
     {
       name: 'Древнее Зло',
       emoji: '👁️',
-      hp: 1020,
-      attack: 275,
-      defense: 130,
+      hp: 405,
+      attack: 247,
+      defense: 142,
       goldReward: [330, 465],
       expReward: [340, 470],
       specialAbility: 'Абсолютная тьма'
@@ -432,9 +432,9 @@ const BOSSES = {
   10: {
     name: 'Король Слизней',
     emoji: '👑',
-    hp: 400,
-    attack: 60,
-    defense: 40,
+    hp: 35,
+    attack: 12,
+    defense: 5,
     goldReward: 200,
     expReward: 150,
     crystalReward: [1, 1],
@@ -444,9 +444,9 @@ const BOSSES = {
   20: {
     name: 'Альфа Волк',
     emoji: '🐺',
-    hp: 600,
-    attack: 80,
-    defense: 60,
+    hp: 60,
+    attack: 20,
+    defense: 12,
     goldReward: 350,
     expReward: 200,
     crystalReward: [1, 2],
@@ -456,9 +456,9 @@ const BOSSES = {
   30: {
     name: 'Вожак Орков',
     emoji: '👹',
-    hp: 800,
-    attack: 100,
-    defense: 80,
+    hp: 85,
+    attack: 28,
+    defense: 16,
     goldReward: 500,
     expReward: 300,
     crystalReward: [1, 2],
@@ -468,9 +468,9 @@ const BOSSES = {
   40: {
     name: 'Лич',
     emoji: '☠️',
-    hp: 1200,
-    attack: 130,
-    defense: 100,
+    hp: 110,
+    attack: 38,
+    defense: 22,
     goldReward: 750,
     expReward: 400,
     crystalReward: [1, 2],
@@ -480,9 +480,9 @@ const BOSSES = {
   50: {
     name: 'Огненный Дракон',
     emoji: '🐉',
-    hp: 1500,
-    attack: 160,
-    defense: 120,
+    hp: 140,
+    attack: 55,
+    defense: 32,
     goldReward: 1000,
     expReward: 500,
     crystalReward: [1, 2],
@@ -492,9 +492,9 @@ const BOSSES = {
   60: {
     name: 'Ледяной Колосс',
     emoji: '🧊',
-    hp: 2000,
-    attack: 200,
-    defense: 150,
+    hp: 170,
+    attack: 75,
+    defense: 45,
     goldReward: 1500,
     expReward: 700,
     crystalReward: [1, 2],
@@ -504,9 +504,9 @@ const BOSSES = {
   70: {
     name: 'Древний Дракон',
     emoji: '🐲',
-    hp: 2500,
-    attack: 240,
-    defense: 180,
+    hp: 200,
+    attack: 100,
+    defense: 60,
     goldReward: 2000,
     expReward: 900,
     crystalReward: [2, 2],
@@ -516,9 +516,9 @@ const BOSSES = {
   80: {
     name: 'Повелитель Теней',
     emoji: '🌑',
-    hp: 3000,
-    attack: 280,
-    defense: 220,
+    hp: 240,
+    attack: 130,
+    defense: 75,
     goldReward: 3000,
     expReward: 1200,
     crystalReward: [2, 2],
@@ -528,9 +528,9 @@ const BOSSES = {
   90: {
     name: 'Повелитель Демонов',
     emoji: '😱',
-    hp: 4000,
-    attack: 320,
-    defense: 260,
+    hp: 280,
+    attack: 160,
+    defense: 92,
     goldReward: 4000,
     expReward: 1500,
     crystalReward: [2, 2],
@@ -540,9 +540,9 @@ const BOSSES = {
   100: {
     name: 'Бог Хаоса',
     emoji: '💀',
-    hp: 5000,
-    attack: 380,
-    defense: 300,
+    hp: 320,
+    attack: 190,
+    defense: 110,
     goldReward: 6000,
     expReward: 2000,
     crystalReward: [2, 3],
@@ -552,9 +552,9 @@ const BOSSES = {
   110: {
     name: 'Титан Разрушения',
     emoji: '⚡',
-    hp: 6500,
-    attack: 450,
-    defense: 350,
+    hp: 370,
+    attack: 220,
+    defense: 125,
     goldReward: 8000,
     expReward: 2500,
     crystalReward: [2, 3],
@@ -564,9 +564,9 @@ const BOSSES = {
   120: {
     name: 'Владыка Бездны',
     emoji: '🌀',
-    hp: 8000,
-    attack: 520,
-    defense: 400,
+    hp: 420,
+    attack: 250,
+    defense: 145,
     goldReward: 10000,
     expReward: 3000,
     crystalReward: [3, 3],
@@ -614,7 +614,8 @@ function checkBossAvailable(forestLevel) {
 
 // Создать экземпляр монстра с масштабированием под уровень леса
 function createMonsterInstance(monsterTemplate, forestLevel) {
-  const levelMultiplier = 1 + (forestLevel * 0.1);
+  // Масштабирование: +40% за уровень леса
+  const levelMultiplier = 1 + (forestLevel * 0.4);
   
   // Шанс выпадения предмета с обычных мобов (увеличивается с уровнем)
   const baseDropChance = 0.05; // 5% базовый шанс
@@ -637,19 +638,22 @@ function createMonsterInstance(monsterTemplate, forestLevel) {
   };
 }
 
-// Создать экземпляр босса
-function createBossInstance(bossTemplate, bossLevel) {
+// Создать экземпляр босса с масштабированием
+function createBossInstance(bossTemplate, bossLevel, forestLevel) {
+  // Боссы получают такое же масштабирование как мобы: +40% за уровень
+  const levelMultiplier = 1 + (bossLevel * 0.4);
+  
   const crystalReward = bossTemplate.crystalReward[0] + Math.floor(Math.random() * (bossTemplate.crystalReward[1] - bossTemplate.crystalReward[0] + 1));
   
   return {
     name: bossTemplate.name,
     emoji: bossTemplate.emoji,
-    hp: bossTemplate.hp,
-    maxHP: bossTemplate.hp,
-    attack: bossTemplate.attack,
-    defense: bossTemplate.defense,
-    goldReward: bossTemplate.goldReward,
-    expReward: bossTemplate.expReward,
+    hp: Math.floor(bossTemplate.hp * levelMultiplier),
+    maxHP: Math.floor(bossTemplate.hp * levelMultiplier),
+    attack: Math.floor(bossTemplate.attack * levelMultiplier),
+    defense: Math.floor(bossTemplate.defense * levelMultiplier),
+    goldReward: Math.floor(bossTemplate.goldReward * levelMultiplier),
+    expReward: Math.floor(bossTemplate.expReward * levelMultiplier),
     crystalReward: crystalReward,
     itemDropChance: bossTemplate.itemDropChance,
     specialAbility: bossTemplate.specialAbility,

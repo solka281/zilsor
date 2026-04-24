@@ -423,7 +423,7 @@ router.post('/sell', (req, res) => {
           FROM inventory inv
           JOIN items i ON inv.item_id = i.id
           JOIN players p ON inv.player_id = p.user_id
-          WHERE inv.player_id = ? AND inv.item_id = ? AND inv.equipped = 0`,
+          WHERE inv.player_id = ? AND inv.id = ? AND inv.equipped = 0`,
     [userId, itemId], (err, item) => {
       if (err) {
         return res.json({ success: false, message: 'Ошибка проверки предмета' });
@@ -439,7 +439,7 @@ router.post('/sell', (req, res) => {
         item_rarity, item_slot, power_bonus, hp_bonus, attack_bonus, defense_bonus,
         special_effect, price, currency
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [userId, item.username, item.inventory_id, itemId, item.name, item.description,
+        [userId, item.username, item.inventory_id, item.id, item.name, item.description,
          item.rarity, item.slot, item.power_bonus, item.hp_bonus, item.attack_bonus,
          item.defense_bonus, item.special_effect, price, currency], (err) => {
           if (err) {
@@ -519,12 +519,12 @@ router.post('/buy', (req, res) => {
               return res.json({ success: false, message: 'Ошибка начисления средств' });
             }
             
-            // Добавляем предмет в инвентарь покупателя
-            db.run(`INSERT INTO inventory (player_id, item_id, equipped) VALUES (?, ?, 0)`,
-              [userId, marketItem.item_id], (err) => {
+            // Переносим предмет от продавца к покупателю
+            db.run(`UPDATE inventory SET player_id = ?, equipped = 0 WHERE id = ?`,
+              [userId, marketItem.inventory_id], (err) => {
                 if (err) {
                   db.run('ROLLBACK');
-                  return res.json({ success: false, message: 'Ошибка добавления предмета' });
+                  return res.json({ success: false, message: 'Ошибка передачи предмета' });
                 }
                 
                 // Удаляем предмет с маркетплейса
@@ -841,14 +841,31 @@ router.post('/auction/bid', (req, res) => {
             return res.json({ success: false, message: 'Ошибка списания средств' });
           }
           
+          // Проверяем, нужно ли продлить аукцион (если осталось меньше 5 минут)
+          const now = new Date();
+          const endsAt = new Date(auction.ends_at);
+          const timeLeft = endsAt - now;
+          const fiveMinutes = 5 * 60 * 1000; // 5 минут в миллисекундах
+          
+          let newEndsAt = auction.ends_at;
+          let timeExtended = false;
+          
+          if (timeLeft < fiveMinutes) {
+            // Продлеваем аукцион на 5 минут от текущего времени
+            newEndsAt = new Date(now.getTime() + fiveMinutes).toISOString();
+            timeExtended = true;
+            console.log(`⏰ Аукцион #${auctionId} продлен на 5 минут. Новое время окончания: ${newEndsAt}`);
+          }
+          
           // Обновляем аукцион
           db.run(`UPDATE auctions SET 
                   current_bid = ?, 
                   highest_bidder_id = ?, 
                   highest_bidder_name = ?,
-                  bid_count = bid_count + 1
+                  bid_count = bid_count + 1,
+                  ends_at = ?
                   WHERE id = ?`,
-            [bidAmount, userId, player.username, auctionId], (err) => {
+            [bidAmount, userId, player.username, newEndsAt, auctionId], (err) => {
               if (err) {
                 db.run('ROLLBACK');
                 return res.json({ success: false, message: 'Ошибка обновления аукциона' });
@@ -864,7 +881,18 @@ router.post('/auction/bid', (req, res) => {
                   }
                   
                   db.run('COMMIT');
-                  res.json({ success: true, message: 'Ставка принята' });
+                  
+                  let message = 'Ставка принята';
+                  if (timeExtended) {
+                    message += '! Аукцион продлен на 5 минут';
+                  }
+                  
+                  res.json({ 
+                    success: true, 
+                    message: message,
+                    timeExtended: timeExtended,
+                    newEndsAt: newEndsAt
+                  });
                   
                   // Уведомляем предыдущего лидера что его ставку перебили
                   if (auction.current_bidder_id && auction.current_bidder_id !== userId) {
@@ -948,7 +976,7 @@ function completeExpiredAuctions() {
         // Нет ставок - возвращаем предмет продавцу
         console.log(`❌ Аукцион #${auction.id} завершен без ставок`);
         
-        db.run(`UPDATE auctions SET status = 'expired' WHERE id = ?`,
+        db.run(`UPDATE auctions SET status = 'cancelled' WHERE id = ?`,
           [auction.id], (err) => {
             if (err) {
               console.error('Ошибка обновления статуса:', err);
@@ -964,82 +992,112 @@ function completeExpiredAuctions() {
 // Уведомления через бота
 function notifyBidOutbid(userId, itemName, newBid, currency) {
   try {
-    const bot = require('./bot');
-    const currencySymbol = currency === 'gold' ? '💰' : '💎';
-    bot.sendMessage(userId, 
-      `⚠️ *Вашу ставку перебили!*\n\n` +
-      `📦 Предмет: ${itemName}\n` +
-      `${currencySymbol} Новая ставка: ${newBid}\n\n` +
-      `Сделайте новую ставку чтобы вернуть лидерство!`,
-      { parse_mode: 'Markdown' }
-    ).catch(err => console.log(`Не удалось отправить уведомление игроку ${userId}`));
+    if (global.telegramBot) {
+      const currencySymbol = currency === 'gold' ? '💰' : '💎';
+      global.telegramBot.sendMessage(userId, 
+        `⚠️ *Вашу ставку перебили!*\n\n` +
+        `📦 Предмет: ${itemName}\n` +
+        `${currencySymbol} Новая ставка: ${newBid}\n\n` +
+        `Сделайте новую ставку чтобы вернуть лидерство!`,
+        { parse_mode: 'Markdown' }
+      ).catch(err => console.log(`Не удалось отправить уведомление игроку ${userId}:`, err));
+    }
   } catch (e) {
-    console.error('Ошибка отправки уведомления:', e);
+    console.error('Ошибка отправки уведомления о перебитой ставке:', e);
   }
 }
 
 function notifyAuctionSold(sellerId, itemName, amount, currency, buyerName) {
   try {
-    const bot = require('./bot');
-    const currencySymbol = currency === 'gold' ? '💰' : '💎';
-    bot.sendMessage(sellerId,
-      `✅ *Ваш аукцион завершен!*\n\n` +
-      `📦 Предмет: ${itemName}\n` +
-      `👤 Покупатель: ${buyerName}\n` +
-      `${currencySymbol} Вы получили: ${amount} (комиссия 20%)\n\n` +
-      `Деньги зачислены на ваш счет!`,
-      { parse_mode: 'Markdown' }
-    ).catch(err => console.log(`Не удалось отправить уведомление игроку ${sellerId}`));
+    if (global.telegramBot) {
+      const currencySymbol = currency === 'gold' ? '💰' : '💎';
+      global.telegramBot.sendMessage(sellerId,
+        `✅ *Ваш аукцион завершен!*\n\n` +
+        `📦 Предмет: ${itemName}\n` +
+        `👤 Покупатель: ${buyerName}\n` +
+        `${currencySymbol} Вы получили: ${amount} (комиссия 20%)\n\n` +
+        `Деньги зачислены на ваш счет!`,
+        { parse_mode: 'Markdown' }
+      ).catch(err => console.log(`Не удалось отправить уведомление игроку ${sellerId}:`, err));
+    }
   } catch (e) {
-    console.error('Ошибка отправки уведомления:', e);
+    console.error('Ошибка отправки уведомления о продаже аукциона:', e);
   }
 }
 
 function notifyAuctionWon(winnerId, itemName, amount, currency) {
   try {
-    const bot = require('./bot');
-    const currencySymbol = currency === 'gold' ? '💰' : '💎';
-    bot.sendMessage(winnerId,
-      `🎉 *Вы выиграли аукцион!*\n\n` +
-      `📦 Предмет: ${itemName}\n` +
-      `${currencySymbol} Ваша ставка: ${amount}\n\n` +
-      `Предмет добавлен в ваш инвентарь!`,
-      { parse_mode: 'Markdown' }
-    ).catch(err => console.log(`Не удалось отправить уведомление игроку ${winnerId}`));
+    if (global.telegramBot) {
+      const currencySymbol = currency === 'gold' ? '💰' : '💎';
+      global.telegramBot.sendMessage(winnerId,
+        `🎉 *Вы выиграли аукцион!*\n\n` +
+        `📦 Предмет: ${itemName}\n` +
+        `${currencySymbol} Ваша ставка: ${amount}\n\n` +
+        `Предмет добавлен в ваш инвентарь!`,
+        { parse_mode: 'Markdown' }
+      ).catch(err => console.log(`Не удалось отправить уведомление игроку ${winnerId}:`, err));
+    }
   } catch (e) {
-    console.error('Ошибка отправки уведомления:', e);
+    console.error('Ошибка отправки уведомления о выигрыше аукциона:', e);
   }
 }
 
 function notifyAuctionExpired(sellerId, itemName) {
   try {
-    const bot = require('./bot');
-    bot.sendMessage(sellerId,
-      `⏰ *Аукцион завершен*\n\n` +
-      `📦 Предмет: ${itemName}\n` +
-      `❌ Не было ставок\n\n` +
-      `Предмет остался в вашем инвентаре.`,
-      { parse_mode: 'Markdown' }
-    ).catch(err => console.log(`Не удалось отправить уведомление игроку ${sellerId}`));
+    if (global.telegramBot) {
+      global.telegramBot.sendMessage(sellerId,
+        `⏰ *Аукцион завершен*\n\n` +
+        `📦 Предмет: ${itemName}\n` +
+        `❌ Не было ставок\n\n` +
+        `Предмет остался в вашем инвентаре.`,
+        { parse_mode: 'Markdown' }
+      ).catch(err => console.log(`Не удалось отправить уведомление игроку ${sellerId}:`, err));
+    }
   } catch (e) {
-    console.error('Ошибка отправки уведомления:', e);
+    console.error('Ошибка отправки уведомления об истечении аукциона:', e);
   }
 }
 
 function notifyItemSold(sellerId, itemName, amount, currency, buyerName) {
   try {
-    const bot = require('./bot');
-    const currencySymbol = currency === 'gold' ? '💰' : '💎';
-    bot.sendMessage(sellerId,
-      `✅ *Ваш предмет куплен!*\n\n` +
-      `📦 Предмет: ${itemName}\n` +
-      `👤 Покупатель: ${buyerName}\n` +
-      `${currencySymbol} Вы получили: ${amount} (комиссия 20%)\n\n` +
-      `Деньги зачислены на ваш счет!`,
-      { parse_mode: 'Markdown' }
-    ).catch(err => console.log(`Не удалось отправить уведомление игроку ${sellerId}`));
+    // Пытаемся получить бота разными способами
+    let bot = null;
+    
+    // Способ 1: Глобальная переменная
+    if (global.telegramBot) {
+      bot = global.telegramBot;
+    }
+    // Способ 2: Прямой импорт (с задержкой для избежания циклической зависимости)
+    else {
+      try {
+        delete require.cache[require.resolve('./bot')];
+        const botModule = require('./bot');
+        bot = botModule.bot || botModule;
+      } catch (e) {
+        console.log('❌ Не удалось импортировать бота:', e.message);
+      }
+    }
+    
+    if (bot && typeof bot.sendMessage === 'function') {
+      const currencySymbol = currency === 'gold' ? '💰' : '💎';
+      const message = `✅ *Ваш предмет куплен!*\n\n` +
+        `📦 Предмет: ${itemName}\n` +
+        `👤 Покупатель: ${buyerName}\n` +
+        `${currencySymbol} Вы получили: ${amount} (комиссия 20%)\n\n` +
+        `Деньги зачислены на ваш счет!`;
+      
+      bot.sendMessage(sellerId, message, { parse_mode: 'Markdown' })
+        .then(() => {
+          console.log('✅ Уведомление о продаже отправлено продавцу', sellerId);
+        })
+        .catch(err => {
+          console.error('❌ Ошибка отправки уведомления продавцу', sellerId, ':', err);
+        });
+    } else {
+      console.error('❌ Бот не доступен для отправки уведомления о продаже');
+    }
   } catch (e) {
-    console.error('Ошибка отправки уведомления:', e);
+    console.error('❌ Критическая ошибка в notifyItemSold:', e);
   }
 }
 
@@ -1048,6 +1106,58 @@ setInterval(completeExpiredAuctions, 60 * 1000);
 
 // Первая проверка через 10 секунд после запуска
 setTimeout(completeExpiredAuctions, 10000);
+
+// Тестовая функция для проверки уведомлений
+router.post('/test-notification', (req, res) => {
+  const { userId } = req.body;
+  
+  if (!userId) {
+    return res.json({ success: false, message: 'userId не указан' });
+  }
+  
+  console.log('🧪 Тестируем уведомление для пользователя:', userId);
+  
+  try {
+    // Пытаемся получить бота разными способами
+    let bot = null;
+    
+    // Способ 1: Глобальная переменная
+    if (global.telegramBot) {
+      bot = global.telegramBot;
+      console.log('🤖 Используем global.telegramBot для теста');
+    }
+    // Способ 2: Прямой импорт
+    else {
+      try {
+        delete require.cache[require.resolve('./bot')];
+        const botModule = require('./bot');
+        bot = botModule.bot || botModule;
+        console.log('🤖 Используем прямой импорт бота для теста');
+      } catch (e) {
+        console.log('❌ Не удалось импортировать бота для теста:', e.message);
+      }
+    }
+    
+    if (bot && typeof bot.sendMessage === 'function') {
+      bot.sendMessage(userId, 
+        '🧪 *Тест уведомлений маркетплейса*\n\nЕсли вы видите это сообщение, уведомления работают!',
+        { parse_mode: 'Markdown' }
+      ).then(() => {
+        console.log('✅ Тестовое уведомление отправлено');
+        res.json({ success: true, message: 'Тестовое уведомление отправлено' });
+      }).catch(err => {
+        console.error('❌ Ошибка отправки тестового уведомления:', err);
+        res.json({ success: false, message: 'Ошибка отправки: ' + err.message });
+      });
+    } else {
+      console.error('❌ Бот не доступен для тестирования');
+      res.json({ success: false, message: 'Бот не доступен' });
+    }
+  } catch (e) {
+    console.error('❌ Критическая ошибка в тесте:', e);
+    res.json({ success: false, message: 'Критическая ошибка: ' + e.message });
+  }
+});
 
 module.exports = {
   router,

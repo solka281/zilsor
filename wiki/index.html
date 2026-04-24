@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zilsor Race Wiki - Энциклопедия игры</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Навигация -->
+        <nav class="sidebar">
+            <div class="logo">
+                <h1>🏆 Zilsor Race</h1>
+                <p>Энциклопедия</p>
+            </div>
+            
+            <div class="nav-section">
+                <h3><i class="fas fa-home"></i> Главная</h3>
+                <ul class="nav-list">
+                    <li><a href="#home" data-section="home">🏠 Главная страница</a></li>
+                </ul>
+            </div>
+            
+            <div class="nav-section">
+                <h3><i class="fas fa-users"></i> Расы</h3>
+                <ul class="nav-list">
+                    <li><a href="#races-all" data-section="races" data-view="all">Все расы (24)</a></li>
+                </ul>
+            </div>
+
+            <div class="nav-section">
+                <h3><i class="fas fa-sword"></i> Предметы</h3>
+                <ul class="nav-list">
+                    <li><a href="#items-all" data-section="items" data-view="all">Все предметы</a></li>
+                </ul>
+            </div>
+
+            <div class="nav-section">
+                <h3><i class="fas fa-map"></i> Локации</h3>
+                <ul class="nav-list">
+                    <li><a href="#locations-all" data-section="locations" data-view="all">Все локации</a></li>
+                    <li><a href="#locations-bosses" data-section="locations" data-view="bosses">Боссы</a></li>
+                    <li><a href="#locations-raids" data-section="locations" data-view="raids">Рейды</a></li>
+                </ul>
+            </div>
+            <div class="nav-section">
+                <h3><i class="fas fa-gamepad"></i> Игровые системы</h3>
+                <ul class="nav-list">
+                    <li><a href="#systems-all" data-section="systems" data-type="all">Все системы</a></li>
+                </ul>
+            </div>
+        </nav>
+
+        <!-- Основной контент -->
+        <main class="content">
+            <div class="content-header">
+                <div class="header-left">
+                    <button class="mobile-menu-toggle" id="mobile-menu-toggle">
+                        <i class="fas fa-bars"></i>
+                    </button>
+                    <h1 id="page-title">Добро пожаловать в Zilsor Race Wiki</h1>
+                </div>
+                <div class="search-container">
+                    <input type="text" id="search-input" placeholder="Поиск по энциклопедии...">
+                    <i class="fas fa-search"></i>
+                </div>
+            </div>
+
+            <div id="content-area">
+                <!-- Главная страница -->
+                <div class="welcome-section">
+                    <div class="hero-card">
+                        <h2>🎮 Энциклопедия Zilsor Race</h2>
+                        <p>Полное руководство по игре, включающее информацию о расах, предметах, боевых системах и многом другом.</p>
+                        
+                        <div class="quick-links" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-top: 30px;">
+                            <a href="races.html" style="background: rgba(139, 92, 246, 0.2); padding: 30px; border-radius: 12px; text-decoration: none; color: #c4b5fd; border: 2px solid #8b5cf6; transition: all 0.3s;">
+                                <div style="font-size: 48px; margin-bottom: 10px;">🎭</div>
+                                <h3 style="margin: 0 0 10px 0;">Расы</h3>
+                                <p style="margin: 0; color: #a5b4fc; font-size: 14px;">23 уникальные расы</p>
+                            </a>
+                            
+                            <a href="items.html" style="background: rgba(139, 92, 246, 0.2); padding: 30px; border-radius: 12px; text-decoration: none; color: #c4b5fd; border: 2px solid #8b5cf6; transition: all 0.3s;">
+                                <div style="font-size: 48px; margin-bottom: 10px;">⚔️</div>
+                                <h3 style="margin: 0 0 10px 0;">Предметы</h3>
+                                <p style="margin: 0; color: #a5b4fc; font-size: 14px;">Оружие, броня, артефакты</p>
+                            </a>
+                            
+                            <a href="#locations-all" data-section="locations" data-view="all" style="background: rgba(139, 92, 246, 0.2); padding: 30px; border-radius: 12px; text-decoration: none; color: #c4b5fd; border: 2px solid #8b5cf6; transition: all 0.3s;">
+                                <div style="font-size: 48px; margin-bottom: 10px;">🗺️</div>
+                                <h3 style="margin: 0 0 10px 0;">Локации</h3>
+                                <p style="margin: 0; color: #a5b4fc; font-size: 14px;">12 локаций с боссами</p>
+                            </a>
+                        </div>
+                        
+                        <div class="stats-grid">
+                            <div class="stat-card">
+                                <div class="stat-number" id="total-races">23</div>
+                                <div class="stat-label">Рас</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-number" id="total-items">50+</div>
+                                <div class="stat-label">Предметов</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-number" id="total-locations">12</div>
+                                <div class="stat-label">Локаций</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-number" id="total-systems">8</div>
+                                <div class="stat-label">Систем</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="quick-links">
+                        <h3>🚀 Быстрый старт</h3>
+                        <div class="link-grid">
+                            <a href="#races-common" class="quick-link" data-section="races" data-rarity="COMMON">
+                                <i class="fas fa-user"></i>
+                                <span>Выбор расы</span>
+                            </a>
+                            <a href="#systems-combat" class="quick-link" data-section="systems" data-type="combat">
+                                <i class="fas fa-sword"></i>
+                                <span>Боевая система</span>
+                            </a>
+                            <a href="#items-weapons" class="quick-link" data-section="items" data-type="weapon">
+                                <i class="fas fa-shield-alt"></i>
+                                <span>Экипировка</span>
+                            </a>
+                            <a href="#progression-levels" class="quick-link" data-section="progression" data-type="levels">
+                                <i class="fas fa-chart-line"></i>
+                                <span>Прогрессия</span>
+                            </a>
+                        </div>
+                    </div>
+
+                    <div class="recent-updates">
+                        <h3>📝 Последние обновления</h3>
+                        <div class="update-list">
+                            <div class="update-item">
+                                <div class="update-date">Сегодня</div>
+                                <div class="update-text">Исправлена система урона от предметов</div>
+                            </div>
+                            <div class="update-item">
+                                <div class="update-date">Вчера</div>
+                                <div class="update-text">Добавлена система скорости как в Pokemon</div>
+                            </div>
+                            <div class="update-item">
+                                <div class="update-date">2 дня назад</div>
+                                <div class="update-text">Обновлена система элементальных эффектов</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="locations_data.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

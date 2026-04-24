@@ -12,11 +12,11 @@
     "build": "npm install"
   },
   "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.22.1",
     "node-telegram-bot-api": "^0.66.0",
-    "sqlite3": "^5.1.7",
     "pg": "^8.11.3",
-    "express": "^4.18.2",
-    "cors": "^2.8.5"
+    "sqlite3": "^5.1.7"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"

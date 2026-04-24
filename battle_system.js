@@ -1,5 +1,7 @@
 // Система пошаговых боев
 const raceAbilities = require('./race_abilities');
+const speedSystem = require('./speed_system');
+const elementalSystem = require('./elemental_system');
 
 const activeBattles = new Map(); // userId -> battleState
 const pvpBattles = new Map(); // battleId -> pvpBattleState
@@ -40,6 +42,23 @@ function createBattle(userId, playerStats, enemy) {
 function createPvPBattle(player1Id, player1Stats, player2Id, player2Stats) {
   const battleId = `${player1Id}_vs_${player2Id}_${Date.now()}`;
   
+  // Проверяем есть ли уже рассчитанная скорость
+  if (!player1Stats.speed) {
+    // Рассчитываем скорость только если её нет
+    const p1Speed = speedSystem.calculatePlayerSpeed(player1Stats, player1Stats.itemEffects);
+    player1Stats.speed = p1Speed.totalSpeed;
+  }
+  
+  if (!player2Stats.speed) {
+    // Рассчитываем скорость только если её нет
+    const p2Speed = speedSystem.calculatePlayerSpeed(player2Stats, player2Stats.itemEffects);
+    player2Stats.speed = p2Speed.totalSpeed;
+  }
+  
+  console.log('🏃 Финальные скорости в PvP бою:');
+  console.log(`  - ${player1Stats.username}: ${player1Stats.speed}`);
+  console.log(`  - ${player2Stats.username}: ${player2Stats.speed}`);
+  
   const battle = {
     battleId: battleId,
     type: 'pvp',
@@ -51,7 +70,19 @@ function createPvPBattle(player1Id, player1Stats, player2Id, player2Stats) {
       action: null,
       username: player1Stats.username,
       specialEnergy: 0,
-      specialReady: false
+      specialReady: false,
+      battleContext: {
+        phoenixRevived: false,
+        godShield: 0,
+        burnDamage: 0,
+        burnTurns: 0,
+        freezeTurns: 0,
+        stunTurns: 0,
+        curseTurns: 0,
+        curseEffect: 0,
+        berserkMode: false,
+        immortalChance: 0
+      }
     },
     player2: {
       id: player2Id,
@@ -61,29 +92,22 @@ function createPvPBattle(player1Id, player1Stats, player2Id, player2Stats) {
       action: null,
       username: player2Stats.username,
       specialEnergy: 0,
-      specialReady: false
-    },
-    round: 1,
-    startTime: Date.now(),
-    // Контекст для способностей рас
-    battleContext: {
-      player1: {
+      specialReady: false,
+      battleContext: {
         phoenixRevived: false,
         godShield: 0,
         burnDamage: 0,
         burnTurns: 0,
-        berserkMode: false,
-        immortalChance: 0
-      },
-      player2: {
-        phoenixRevived: false,
-        godShield: 0,
-        burnDamage: 0,
-        burnTurns: 0,
+        freezeTurns: 0,
+        stunTurns: 0,
+        curseTurns: 0,
+        curseEffect: 0,
         berserkMode: false,
         immortalChance: 0
       }
-    }
+    },
+    round: 1,
+    startTime: Date.now()
   };
   
   pvpBattles.set(battleId, battle);
@@ -168,132 +192,229 @@ function executePvPRound(battle) {
     player1Action: null,
     player2Action: null,
     battleOver: false,
-    winnerId: null
+    winnerId: null,
+    statusEffects: []
   };
   
-  // Обрабатываем действия обоих игроков одновременно
+  // Применяем эффекты состояний в начале раунда
+  const p1StatusResult = elementalSystem.applyStatusEffects(p1.stats, p1.battleContext);
+  const p2StatusResult = elementalSystem.applyStatusEffects(p2.stats, p2.battleContext);
   
-  // Действие игрока 1
-  if (p1.action === 'attack') {
-    const attackResult = performAttack(p1.stats, p2.stats);
-    if (attackResult.dodged) {
-      result.player1Action = { text: `💨 ${p2.username} уклонился от вашей атаки!` };
-    } else {
-      p2.hp -= attackResult.damage;
-      let text = `⚔️ ${p1.username}: ${attackResult.damage} урона`;
-      if (attackResult.critical) text += ` 💥 КРИТ!`;
-      if (attackResult.special) text += ` ✨`;
-      result.player1Action = { text: text, damage: attackResult.damage };
-    }
-    // Накапливаем энергию
-    p1.specialEnergy++;
-    if (p1.specialEnergy >= 3) p1.specialReady = true;
-    
-  } else if (p1.action === 'defend') {
-    p1.defending = true;
-    result.player1Action = { text: `🛡 ${p1.username} принял защитную стойку!` };
-    // Защита тоже дает энергию
-    p1.specialEnergy++;
-    if (p1.specialEnergy >= 3) p1.specialReady = true;
-    
-  } else if (p1.action === 'special') {
-    // Проверяем доступность
-    if (!p1.specialReady) {
-      result.player1Action = { text: `❌ Спец. атака ${p1.username} не готова! (${p1.specialEnergy}/3)` };
-    } else {
-      // Спец атака: x2 урона, 20% промах, игнорирует 50% защиты
-      if (Math.random() < 0.2) {
-        result.player1Action = { text: `❌ Спец. атака ${p1.username} промахнулась!` };
-      } else {
-        const specialAttack = performAttack(
-          { ...p1.stats, attack: p1.stats.attack * 2 },
-          { ...p2.stats, defense: p2.stats.defense * 0.5 }
-        );
-        if (specialAttack.dodged) {
-          result.player1Action = { text: `💨 ${p2.username} уклонился от спец. атаки!` };
-        } else {
-          p2.hp -= specialAttack.damage;
-          result.player1Action = { text: `✨ ${p1.username}: ${specialAttack.damage} урона!`, damage: specialAttack.damage };
-        }
-      }
-      // Сбрасываем энергию
-      p1.specialEnergy = 0;
-      p1.specialReady = false;
-    }
+  if (p1StatusResult.effects.length > 0) {
+    result.statusEffects.push(`${p1.username}: ${p1StatusResult.effects.join(', ')}`);
+  }
+  if (p2StatusResult.effects.length > 0) {
+    result.statusEffects.push(`${p2.username}: ${p2StatusResult.effects.join(', ')}`);
   }
   
-  // Проверка победы
-  if (p2.hp <= 0) {
-    result.battleOver = true;
-    result.winnerId = p1.id;
-    result.player2Action = { text: `💀 ${p2.username} повержен!` };
-    return result;
-  }
-  
-  // Действие игрока 2
-  if (p2.action === 'attack') {
-    const attackResult = performAttack(p2.stats, p1.stats);
-    if (attackResult.dodged) {
-      result.player2Action = { text: `💨 ${p1.username} уклонился от вашей атаки!` };
-    } else {
-      let damage = attackResult.damage;
-      if (p1.defending) {
-        damage = Math.floor(damage * 0.5);
-        p1.defending = false;
-      }
-      p1.hp -= damage;
-      let text = `⚔️ ${p2.username}: ${damage} урона`;
-      if (attackResult.critical) text += ` 💥 КРИТ!`;
-      if (attackResult.special) text += ` ✨`;
-      result.player2Action = { text: text, damage: damage };
-    }
-    // Накапливаем энергию
-    p2.specialEnergy++;
-    if (p2.specialEnergy >= 3) p2.specialReady = true;
-    
-  } else if (p2.action === 'defend') {
-    p2.defending = true;
-    result.player2Action = { text: `🛡 ${p2.username} принял защитную стойку!` };
-    // Защита тоже дает энергию
-    p2.specialEnergy++;
-    if (p2.specialEnergy >= 3) p2.specialReady = true;
-    
-  } else if (p2.action === 'special') {
-    // Проверяем доступность
-    if (!p2.specialReady) {
-      result.player2Action = { text: `❌ Спец. атака ${p2.username} не готова! (${p2.specialEnergy}/3)` };
-    } else {
-      // Спец атака: x2 урона, 20% промах, игнорирует 50% защиты
-      if (Math.random() < 0.2) {
-        result.player2Action = { text: `❌ Спец. атака ${p2.username} промахнулась!` };
-      } else {
-        const specialAttack = performAttack(
-          { ...p2.stats, attack: p2.stats.attack * 2 },
-          { ...p1.stats, defense: p1.stats.defense * 0.5 }
-        );
-        if (specialAttack.dodged) {
-          result.player2Action = { text: `💨 ${p1.username} уклонился от спец. атаки!` };
-        } else {
-          let damage = specialAttack.damage;
-          if (p1.defending) {
-            damage = Math.floor(damage * 0.5);
-            p1.defending = false;
-          }
-          p1.hp -= damage;
-          result.player2Action = { text: `✨ ${p2.username}: ${damage} урона!`, damage: damage };
-        }
-      }
-      // Сбрасываем энергию
-      p2.specialEnergy = 0;
-      p2.specialReady = false;
-    }
-  }
-  
-  // Проверка победы
+  // Проверяем смерть от эффектов
   if (p1.hp <= 0) {
     result.battleOver = true;
     result.winnerId = p2.id;
     return result;
+  }
+  if (p2.hp <= 0) {
+    result.battleOver = true;
+    result.winnerId = p1.id;
+    return result;
+  }
+  
+  // Определяем порядок ходов на основе скорости
+  const p1Speed = p1.stats.speed || 100;
+  const p2Speed = p2.stats.speed || 100;
+  
+  const firstPlayer = speedSystem.determineTurnOrder(p1Speed, p2Speed);
+  
+  // Выполняем действия в порядке скорости
+  const actions = firstPlayer === 'player1' ? 
+    [{ player: p1, opponent: p2, resultKey: 'player1Action' }, 
+     { player: p2, opponent: p1, resultKey: 'player2Action' }] :
+    [{ player: p2, opponent: p1, resultKey: 'player2Action' }, 
+     { player: p1, opponent: p2, resultKey: 'player1Action' }];
+  
+  for (const { player, opponent, resultKey } of actions) {
+    // Проверяем может ли игрок действовать (не заморожен/оглушен)
+    const canAct = player === p1 ? p1StatusResult.canAct : p2StatusResult.canAct;
+    
+    if (!canAct) {
+      result[resultKey] = { text: `❄️⚡ ${player.username} не может действовать!` };
+      continue;
+    }
+    
+    // Применяем проклятие к характеристикам
+    const modifiedStats = elementalSystem.applyCurseEffect(player.stats, player.battleContext);
+    
+    if (player.action === 'attack') {
+      const attackResult = performAttack(modifiedStats, opponent.stats, player.battleContext);
+      if (attackResult.dodged) {
+        result[resultKey] = { text: `💨 ${opponent.username} уклонился от атаки ${player.username}!` };
+      } else {
+        let totalDamage = attackResult.totalDamage || attackResult.damage;
+        opponent.hp -= totalDamage;
+        
+        // Формируем детализацию урона
+        let damageDetails = [];
+        const breakdown = attackResult.damageBreakdown;
+        
+        if (breakdown) {
+          if (breakdown.base > 0) damageDetails.push(`Атака ${breakdown.base}`);
+          if (breakdown.critical > 0) damageDetails.push(`Крит ${breakdown.critical}`);
+          if (breakdown.ability.damage > 0) damageDetails.push(`${breakdown.ability.name} ${breakdown.ability.damage}`);
+          if (breakdown.elemental.damage > 0) damageDetails.push(`${breakdown.elemental.name} ${breakdown.elemental.damage}`);
+          if (breakdown.items && breakdown.items.length > 0) {
+            breakdown.items.forEach(item => {
+              if (item.damageBonus > 0) {
+                damageDetails.push(`${item.name} ${item.damageBonus}`);
+              }
+            });
+          }
+        }
+        
+        let text = `⚔️ ${player.username}: ${totalDamage} урона`;
+        if (damageDetails.length > 0) {
+          text += ` (${damageDetails.join(' + ')})`;
+        }
+        
+        if (attackResult.critical) text += ` 💥 КРИТ!`;
+        if (attackResult.doubleAttack) text += ` ⚡⚡ ДВОЙНАЯ АТАКА!`;
+        if (attackResult.special) text += ` ✨`;
+        if (attackResult.abilityMessage) text += `\n${attackResult.abilityMessage}`;
+        if (attackResult.elementalMessage) text += `\n${attackResult.elementalMessage}`;
+        
+        result[resultKey] = { text: text, damage: totalDamage };
+        
+        // Применяем элементальные эффекты к противнику
+        if (player.battleContext && player.battleContext.opponentEffects) {
+          const opponentContext = opponent.battleContext;
+          const effects = player.battleContext.opponentEffects;
+          
+          if (effects.burnDamage) {
+            opponentContext.burnDamage = effects.burnDamage;
+            opponentContext.burnTurns = effects.burnTurns;
+          }
+          if (effects.freezeTurns) {
+            opponentContext.freezeTurns = effects.freezeTurns;
+          }
+          if (effects.stunTurns) {
+            opponentContext.stunTurns = effects.stunTurns;
+          }
+          if (effects.curseTurns) {
+            opponentContext.curseTurns = effects.curseTurns;
+            opponentContext.curseEffect = effects.curseEffect;
+          }
+          
+          // Очищаем временные эффекты
+          player.battleContext.opponentEffects = {};
+        }
+      }
+      // Накапливаем энергию
+      player.specialEnergy++;
+      if (player.specialEnergy >= 3) player.specialReady = true;
+      
+    } else if (player.action === 'defend') {
+      player.defending = true;
+      result[resultKey] = { text: `🛡 ${player.username} принял защитную стойку!` };
+      // Защита тоже дает энергию
+      player.specialEnergy++;
+      if (player.specialEnergy >= 3) player.specialReady = true;
+      
+    } else if (player.action === 'special') {
+      // Проверяем доступность
+      if (!player.specialReady) {
+        result[resultKey] = { text: `❌ Спец. атака ${player.username} не готова! (${player.specialEnergy}/3)` };
+      } else {
+        // Спец атака: x2 урона, 20% промах, игнорирует 50% защиты
+        if (Math.random() < 0.2) {
+          result[resultKey] = { text: `❌ Спец. атака ${player.username} промахнулась!` };
+        } else {
+          const specialStats = {
+            ...modifiedStats,
+            attack: modifiedStats.attack * 2
+          };
+          const specialDefense = {
+            ...opponent.stats,
+            defense: opponent.stats.defense * 0.5
+          };
+          
+          const specialAttack = performAttack(specialStats, specialDefense, player.battleContext);
+          if (specialAttack.dodged) {
+            result[resultKey] = { text: `💨 ${opponent.username} уклонился от спец. атаки!` };
+          } else {
+            let totalDamage = specialAttack.totalDamage || specialAttack.damage;
+            if (player.defending) {
+              totalDamage = Math.floor(totalDamage * 0.5);
+              player.defending = false;
+            }
+            opponent.hp -= totalDamage;
+            
+            // Формируем детализацию урона для спецатаки
+            let damageDetails = [];
+            const breakdown = specialAttack.damageBreakdown;
+            
+            if (breakdown) {
+              if (breakdown.base > 0) damageDetails.push(`Спец.атака ${breakdown.base}`);
+              if (breakdown.critical > 0) damageDetails.push(`Крит ${breakdown.critical}`);
+              if (breakdown.ability.damage > 0) damageDetails.push(`${breakdown.ability.name} ${breakdown.ability.damage}`);
+              if (breakdown.elemental.damage > 0) damageDetails.push(`${breakdown.elemental.name} ${breakdown.elemental.damage}`);
+              if (breakdown.items && breakdown.items.length > 0) {
+                breakdown.items.forEach(item => {
+                  if (item.damageBonus > 0) {
+                    damageDetails.push(`${item.name} ${item.damageBonus}`);
+                  }
+                });
+              }
+            }
+            
+            let text = `✨ ${player.username}: ${totalDamage} урона!`;
+            if (damageDetails.length > 0) {
+              text += ` (${damageDetails.join(' + ')})`;
+            }
+            
+            if (specialAttack.doubleAttack) text += ` ⚡⚡ ДВОЙНАЯ СПЕЦ. АТАКА!`;
+            if (specialAttack.abilityMessage) text += `\n${specialAttack.abilityMessage}`;
+            if (specialAttack.elementalMessage) text += `\n${specialAttack.elementalMessage}`;
+            
+            result[resultKey] = { text: text, damage: totalDamage };
+            
+            // Применяем элементальные эффекты к противнику
+            if (player.battleContext && player.battleContext.opponentEffects) {
+              const opponentContext = opponent.battleContext;
+              const effects = player.battleContext.opponentEffects;
+              
+              if (effects.burnDamage) {
+                opponentContext.burnDamage = effects.burnDamage;
+                opponentContext.burnTurns = effects.burnTurns;
+              }
+              if (effects.freezeTurns) {
+                opponentContext.freezeTurns = effects.freezeTurns;
+              }
+              if (effects.stunTurns) {
+                opponentContext.stunTurns = effects.stunTurns;
+              }
+              if (effects.curseTurns) {
+                opponentContext.curseTurns = effects.curseTurns;
+                opponentContext.curseEffect = effects.curseEffect;
+              }
+              
+              // Очищаем временные эффекты
+              player.battleContext.opponentEffects = {};
+            }
+          }
+        }
+        // Сбрасываем энергию
+        player.specialEnergy = 0;
+        player.specialReady = false;
+      }
+    }
+    
+    // Проверка победы после каждого действия
+    if (opponent.hp <= 0) {
+      result.battleOver = true;
+      result.winnerId = player.id;
+      result[resultKey === 'player1Action' ? 'player2Action' : 'player1Action'] = 
+        { text: `💀 ${opponent.username} повержен!` };
+      return result;
+    }
   }
   
   // Сбрасываем действия и увеличиваем раунд
@@ -311,8 +432,12 @@ function executePvPRound(battle) {
 
 // Выполнить атаку
 function performAttack(attacker, defender, battleContext = null) {
-  // Модифицируем шанс уклонения с учетом рун
-  let dodgeChance = 0.05 + (defender.defense / 1000);
+  // Рассчитываем скорости для критов и уклонений
+  const attackerSpeed = attacker.speed || 100;
+  const defenderSpeed = defender.speed || 100;
+  
+  // Модифицируем шанс уклонения с учетом скорости
+  let dodgeChance = speedSystem.calculateDodgeChance(defenderSpeed, attackerSpeed);
   if (defender.itemEffects && defender.itemEffects.length > 0) {
     dodgeChance = raceAbilities.modifyDodgeWithItems(dodgeChance, defender.itemEffects);
   }
@@ -322,20 +447,42 @@ function performAttack(attacker, defender, battleContext = null) {
   }
   
   // Базовый урон
-  let damage = attacker.attack - (defender.defense * 0.3);
-  damage = Math.max(5, damage);
+  let baseDamage = attacker.attack - (defender.defense * 0.3);
+  baseDamage = Math.max(5, baseDamage);
   
-  // Шанс критического удара
-  const critChance = 0.10 + (attacker.attack / 500);
+  // Детализация урона с названиями источников
+  let damageBreakdown = {
+    base: Math.floor(baseDamage),
+    critical: 0,
+    ability: { damage: 0, name: '' },
+    elemental: { damage: 0, name: '' },
+    items: [],  // Массив для детального описания предметов
+    total: 0
+  };
+  
+  let totalDamage = baseDamage;
+  
+  // Шанс критического удара с учетом скорости
+  const critChance = speedSystem.calculateCritChance(attackerSpeed, defenderSpeed);
   const isCritical = Math.random() < critChance;
   if (isCritical) {
-    damage *= 2;
+    const critDamage = baseDamage; // x2 урона = +100% = +baseDamage
+    damageBreakdown.critical = Math.floor(critDamage);
+    totalDamage += critDamage;
+  }
+  
+  // Проверяем двойную атаку
+  const isDoubleAttack = speedSystem.checkDoubleAttack(attackerSpeed, defenderSpeed);
+  if (isDoubleAttack) {
+    totalDamage = speedSystem.modifyDamageBySpeed(totalDamage, attackerSpeed, defenderSpeed, true);
   }
   
   // Создаем результат атаки
   let attackResult = {
-    damage: Math.floor(damage),
+    damage: Math.floor(totalDamage),
+    damageBreakdown: damageBreakdown,
     critical: isCritical,
+    doubleAttack: isDoubleAttack,
     special: false,
     specialName: '',
     dodged: false
@@ -343,6 +490,8 @@ function performAttack(attacker, defender, battleContext = null) {
   
   // Применяем способности расы атакующего
   if (attacker.specialAbility) {
+    const originalDamage = attackResult.damage;
+    
     // Подготавливаем объекты для системы способностей
     const attackerForAbility = {
       specialAbility: attacker.specialAbility,
@@ -367,6 +516,13 @@ function performAttack(attacker, defender, battleContext = null) {
       battleContext
     );
     
+    // Рассчитываем урон от способности
+    const abilityDamage = attackResult.damage - originalDamage;
+    if (abilityDamage > 0) {
+      damageBreakdown.ability.damage = abilityDamage;
+      damageBreakdown.ability.name = attacker.raceName || 'Расовая способность';
+    }
+    
     // Обновляем HP атакующего если способность его лечила
     if (attacker.hp !== undefined) {
       attacker.hp = attackerForAbility.currentHP;
@@ -375,12 +531,46 @@ function performAttack(attacker, defender, battleContext = null) {
     }
   }
   
-  // Применяем модификацию урона от рун атакующего
+  // Применяем модификацию урона от рун и предметов атакующего
   if (attacker.itemEffects && attacker.itemEffects.length > 0) {
+    const originalDamage = attackResult.damage;
+    
     const runeResult = raceAbilities.modifyDamageWithItems(attackResult.damage, attacker.itemEffects, true);
     attackResult.damage = runeResult.damage;
+    
+    // Рассчитываем урон от предметов после применения эффектов
+    const totalItemDamage = attackResult.damage - originalDamage;
+    if (totalItemDamage > 0) {
+      // Распределяем урон между предметами пропорционально их эффектам
+      const itemDamageDetails = calculateItemDamageBreakdownAfterEffects(originalDamage, totalItemDamage, attacker.itemEffects, runeResult.message);
+      if (itemDamageDetails.length > 0) {
+        damageBreakdown.items = itemDamageDetails;
+      }
+    }
+    
     if (runeResult.message) {
       attackResult.abilityMessage = (attackResult.abilityMessage || '') + '\n' + runeResult.message;
+    }
+  }
+  
+  // Применяем элементальные эффекты
+  if (attacker.itemEffects && attacker.itemEffects.length > 0) {
+    const originalDamage = attackResult.damage;
+    attackResult = elementalSystem.applyElementalEffect(
+      attacker, 
+      defender, 
+      attackResult, 
+      battleContext, 
+      attacker.itemEffects
+    );
+    
+    // Рассчитываем урон от элементов
+    const elementalDamage = attackResult.damage - originalDamage;
+    if (elementalDamage > 0) {
+      // Определяем какой элемент сработал
+      const elementName = getTriggeredElementName(attacker.itemEffects, attackResult.elementalMessage);
+      damageBreakdown.elemental.damage = elementalDamage;
+      damageBreakdown.elemental.name = elementName;
     }
   }
   
@@ -388,7 +578,97 @@ function performAttack(attacker, defender, battleContext = null) {
   const variance = 0.9 + Math.random() * 0.2;
   attackResult.damage = Math.floor(attackResult.damage * variance);
   
+  // Обновляем итоговый урон в детализации
+  damageBreakdown.total = attackResult.damage;
+  attackResult.damageBreakdown = damageBreakdown;
+  
+  // Если двойная атака - наносим урон дважды
+  if (isDoubleAttack) {
+    attackResult.secondDamage = attackResult.damage;
+    attackResult.totalDamage = attackResult.damage * 2;
+  } else {
+    attackResult.totalDamage = attackResult.damage;
+  }
+  
   return attackResult;
+}
+
+// Рассчитать детализацию урона от предметов после применения эффектов
+function calculateItemDamageBreakdownAfterEffects(baseDamage, totalItemDamage, itemEffects, effectMessage) {
+  const itemDetails = [];
+  
+  if (!itemEffects || itemEffects.length === 0 || totalItemDamage <= 0) return itemDetails;
+  
+  // Анализируем какие эффекты сработали по сообщению
+  const messageLines = effectMessage ? effectMessage.split('\n') : [];
+  
+  itemEffects.forEach(effect => {
+    if (!effect) return;
+    
+    let itemName = 'Неизвестный предмет';
+    let damageBonus = 0;
+    
+    if (effect === 'fire_damage_25') {
+      itemName = 'Пламенный клинок';
+      // Проверяем сработал ли огненный урон
+      if (messageLines.some(line => line.includes('Пламенный клинок'))) {
+        damageBonus = Math.floor(baseDamage * 0.25);
+      }
+    } else if (effect === 'holy_damage_50') {
+      itemName = 'Экскалибур';
+      // Проверяем сработал ли святой урон
+      if (messageLines.some(line => line.includes('Экскалибур'))) {
+        damageBonus = Math.floor(baseDamage * 0.50);
+      }
+    } else if (effect === 'berserk_mode') {
+      itemName = 'Руна берсерка';
+      // Проверяем сработал ли берсерк
+      if (messageLines.some(line => line.includes('Берсерк'))) {
+        damageBonus = Math.floor(baseDamage * 0.50);
+      }
+    } else if (effect === 'shadow_strike') {
+      itemName = 'Клинок теней';
+      // Проверяем сработал ли удар из тени
+      if (messageLines.some(line => line.includes('Удар из тени'))) {
+        damageBonus = Math.floor(baseDamage * 0.50);
+      }
+    }
+    
+    if (damageBonus > 0) {
+      itemDetails.push({ name: itemName, damageBonus: damageBonus });
+    }
+  });
+  
+  return itemDetails;
+}
+
+// Рассчитать детализацию урона от предметов с учетом процентных бонусов
+// Получить детальную информацию о предметах
+function getItemEffectDetails(itemEffects) {
+  const itemMap = {
+    'fire_damage_25': { name: 'Пламенный клинок', damageBonus: 0 }, // Процентный бонус, не фиксированный
+    'shadow_strike': { name: 'Клинок теней', damageBonus: 0 }, // Случайный эффект
+    'holy_damage_50': { name: 'Экскалибур', damageBonus: 0 }, // Процентный бонус, не фиксированный
+    'berserk_mode': { name: 'Руна берсерка', damageBonus: 0 }, // Процентный бонус, не фиксированный
+    'exp_boost_30': { name: 'Руна мастера', damageBonus: 0 }
+  };
+  
+  return itemEffects.map(effect => {
+    return itemMap[effect] || { name: 'Неизвестный предмет', damageBonus: 0 };
+  });
+}
+
+// Определить какой элемент сработал
+function getTriggeredElementName(itemEffects, elementalMessage) {
+  if (!elementalMessage) return '';
+  
+  if (elementalMessage.includes('🔥')) return 'Амулет огня';
+  if (elementalMessage.includes('❄️')) return 'Амулет льда';
+  if (elementalMessage.includes('⚡')) return 'Амулет молний';
+  if (elementalMessage.includes('🌑')) return 'Амулет тьмы';
+  if (elementalMessage.includes('🌈')) return 'Око Вечности';
+  
+  return 'Элементальный эффект';
 }
 
 // Выполнить ход игрока
@@ -717,5 +997,7 @@ module.exports = {
   deleteBattle,
   playerTurn,
   setPvPAction,
-  getBattleStatus
+  executePvPRound,
+  getBattleStatus,
+  performAttack
 };

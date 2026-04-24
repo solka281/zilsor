@@ -24,9 +24,10 @@ module.exports = {
   RACE_ROLL_CRYSTAL_COST: 10,
   RACE_ROLL_GOLD_COST: 0, // Нельзя крутить за золото
   
-  // Пробуждение
-  AWAKENING_XP_REQUIRED: 5000, // XP для пробуждения
-  AWAKENING_GOLD_COST: 1000,
+  // Пробуждение - новая система
+  AWAKENING_CRYSTAL_COST: [5, 10, 15, 20, 25, 30, 35, 40, 45, 50], // Кристаллы за каждый уровень
+  AWAKENING_FOREST_LEVEL_REQUIRED: [10, 20, 30, 40, 50, 60, 70, 80, 90, 100], // Требуемый уровень леса
+  AWAKENING_BOSSES_REQUIRED: [1, 3, 5, 8, 12, 16, 20, 25, 30, 35], // Требуемое количество убитых боссов
   
   // VIP подписка
   ADMIN_USERNAME: 'trimetillllll',

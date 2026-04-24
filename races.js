@@ -13,23 +13,23 @@ const BASE_RACES = [
   { name: 'Темный Эльф', description: 'Мастера теневой магии', rarity: 'RARE', base_power: 140, base_hp: 100, base_attack: 35, base_defense: 20, special_ability: 'Теневой удар: 20% шанс критического урона', is_legendary: 0 },
   { name: 'Полуорк', description: 'Гибрид силы и разума', rarity: 'RARE', base_power: 150, base_hp: 130, base_attack: 32, base_defense: 22, special_ability: 'Гибридная сила: +10% ко всем характеристикам', is_legendary: 0 },
   { name: 'Гном', description: 'Мастера изобретений', rarity: 'RARE', base_power: 130, base_hp: 90, base_attack: 28, base_defense: 18, special_ability: 'Инженерия: +20% к эффективности предметов', is_legendary: 0 },
-  { name: 'Кентавр', description: 'Быстрые лучники-всадники', rarity: 'RARE', base_power: 145, base_hp: 110, base_attack: 38, base_defense: 16, special_ability: 'Скоростная атака: 25% шанс двойного удара', is_legendary: 0 },
+  { name: 'Кентавр', description: 'Быстрые лучники-всадники', rarity: 'RARE', base_power: 145, base_hp: 110, base_attack: 38, base_defense: 16, special_ability: 'Скоростная атака: 12% шанс двойного удара', is_legendary: 0 },
   { name: 'Минотавр', description: 'Могучие воины-быки', rarity: 'RARE', base_power: 160, base_hp: 140, base_attack: 40, base_defense: 28, special_ability: 'Бычий натиск: +30% урона при полном HP', is_legendary: 0 },
   
   // Эпические расы
-  { name: 'Драконорожденный', description: 'Потомки древних драконов', rarity: 'EPIC', base_power: 200, base_hp: 180, base_attack: 50, base_defense: 40, special_ability: 'Драконье дыхание: Мощная атака по области', is_legendary: 0 },
-  { name: 'Демон', description: 'Существа из преисподней', rarity: 'EPIC', base_power: 220, base_hp: 160, base_attack: 60, base_defense: 35, special_ability: 'Адское пламя: Урон со временем', is_legendary: 0 },
-  { name: 'Ангел', description: 'Небесные воины света', rarity: 'EPIC', base_power: 210, base_hp: 170, base_attack: 55, base_defense: 45, special_ability: 'Божественная защита: Восстановление HP', is_legendary: 0 },
-  { name: 'Элементаль', description: 'Воплощение стихий', rarity: 'EPIC', base_power: 230, base_hp: 150, base_attack: 65, base_defense: 30, special_ability: 'Стихийная мощь: Случайный элементальный урон', is_legendary: 0 },
-  { name: 'Нежить', description: 'Восставшие из мертвых', rarity: 'EPIC', base_power: 190, base_hp: 200, base_attack: 45, base_defense: 50, special_ability: 'Нежизнь: Иммунитет к ядам и болезням', is_legendary: 0 },
-  { name: 'Оборотень', description: 'Дети луны', rarity: 'EPIC', base_power: 240, base_hp: 160, base_attack: 70, base_defense: 25, special_ability: 'Лунная ярость: +50% урона ночью', is_legendary: 0 },
+  { name: 'Драконорожденный', description: 'Потомки древних драконов', rarity: 'EPIC', base_power: 200, base_hp: 180, base_attack: 50, base_defense: 40, special_ability: 'Огненное дыхание: +25% урона от огня', is_legendary: 0 },
+  { name: 'Демон', description: 'Существа из преисподней', rarity: 'EPIC', base_power: 220, base_hp: 160, base_attack: 60, base_defense: 35, special_ability: 'Адское пламя: +20% критического урона', is_legendary: 0 },
+  { name: 'Ангел', description: 'Небесные воины света', rarity: 'EPIC', base_power: 210, base_hp: 170, base_attack: 55, base_defense: 45, special_ability: 'Божественная защита: +15% к защите', is_legendary: 0 },
+  { name: 'Элементаль', description: 'Воплощение стихий', rarity: 'EPIC', base_power: 230, base_hp: 150, base_attack: 65, base_defense: 30, special_ability: 'Стихийная мощь: 25% шанс двойного урона', is_legendary: 0 },
+  { name: 'Нежить', description: 'Восставшие из мертвых', rarity: 'EPIC', base_power: 190, base_hp: 200, base_attack: 45, base_defense: 50, special_ability: 'Нежизнь: +20% к HP и защите', is_legendary: 0 },
+  { name: 'Оборотень', description: 'Дети луны', rarity: 'EPIC', base_power: 240, base_hp: 160, base_attack: 70, base_defense: 25, special_ability: 'Звериная ярость: +30% урона при низком HP', is_legendary: 0 },
   
   // Мистические расы
-  { name: 'Феникс', description: 'Бессмертная огненная птица', rarity: 'MYTHIC', base_power: 300, base_hp: 200, base_attack: 80, base_defense: 60, special_ability: 'Возрождение: Воскрешение после смерти', is_legendary: 0 },
-  { name: 'Вампир', description: 'Повелители ночи', rarity: 'MYTHIC', base_power: 280, base_hp: 180, base_attack: 85, base_defense: 55, special_ability: 'Кровопийство: Восстановление HP от урона', is_legendary: 0 },
-  { name: 'Дракон', description: 'Древние повелители магии', rarity: 'MYTHIC', base_power: 350, base_hp: 250, base_attack: 90, base_defense: 70, special_ability: 'Драконья магия: Мощные заклинания', is_legendary: 0 },
-  { name: 'Лич', description: 'Бессмертный некромант', rarity: 'MYTHIC', base_power: 320, base_hp: 180, base_attack: 95, base_defense: 65, special_ability: 'Некромантия: Призыв мертвых союзников', is_legendary: 0 },
-  { name: 'Джинн', description: 'Повелитель желаний', rarity: 'MYTHIC', base_power: 310, base_hp: 190, base_attack: 88, base_defense: 62, special_ability: 'Исполнение желаний: Случайный мощный эффект', is_legendary: 0 },
+  { name: 'Феникс', description: 'Бессмертная огненная птица', rarity: 'MYTHIC', base_power: 300, base_hp: 200, base_attack: 80, base_defense: 60, special_ability: 'Возрождение: +50% к восстановлению HP', is_legendary: 0 },
+  { name: 'Вампир', description: 'Повелители ночи', rarity: 'MYTHIC', base_power: 280, base_hp: 180, base_attack: 85, base_defense: 55, special_ability: 'Кровопийство: +15% к атаке и HP', is_legendary: 0 },
+  { name: 'Дракон', description: 'Древние повелители магии', rarity: 'MYTHIC', base_power: 350, base_hp: 250, base_attack: 90, base_defense: 70, special_ability: 'Драконья мощь: +40% ко всем характеристикам', is_legendary: 0 },
+  { name: 'Лич', description: 'Бессмертный некромант', rarity: 'MYTHIC', base_power: 320, base_hp: 180, base_attack: 95, base_defense: 65, special_ability: 'Темная магия: +35% к магическому урону', is_legendary: 0 },
+  { name: 'Джинн', description: 'Повелитель желаний', rarity: 'MYTHIC', base_power: 310, base_hp: 190, base_attack: 88, base_defense: 62, special_ability: 'Магия желаний: 20% шанс тройного урона', is_legendary: 0 },
   
   // Легендарные расы
   { name: 'Титан', description: 'Древние гиганты невероятной силы', rarity: 'LEGENDARY', base_power: 500, base_hp: 400, base_attack: 120, base_defense: 100, special_ability: 'Титаническая мощь: Удваивает силу атаки', is_legendary: 1 },

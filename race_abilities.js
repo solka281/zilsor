@@ -9,30 +9,25 @@ function applyRaceAbility(attacker, defender, attackResult, battleContext) {
   let abilityTriggered = false;
   let abilityMessage = '';
   
-  // Ангел - Божественная защита: Восстановление HP
-  if (ability.includes('божественная защита') || ability.includes('восстановление hp')) {
-    // 20% шанс восстановить 15% HP после атаки
-    if (Math.random() < 0.20) {
-      const healAmount = Math.floor(attacker.maxHP * 0.15);
+  // Ангел - Божественная защита: +15% к защите
+  if (ability.includes('божественная защита') || ability.includes('к защите')) {
+    // Пассивная способность, обрабатывается при получении урона
+  }
+  
+  // Вампир - Кровопийство: +15% к атаке и HP
+  else if (ability.includes('кровопийство') || ability.includes('к атаке и hp')) {
+    if (Math.random() < 0.15) {
+      attackResult.damage = Math.floor(attackResult.damage * 1.15);
+      const healAmount = Math.floor(attackResult.damage * 0.15);
       attacker.currentHP = Math.min(attacker.maxHP, attacker.currentHP + healAmount);
       abilityTriggered = true;
-      abilityMessage = `✨ Божественная защита! +${healAmount} HP`;
+      abilityMessage = `🩸 Кровопийство! +15% урона и +${healAmount} HP`;
     }
   }
   
-  // Вампир - Кровопийство: Восстановление HP от урона
-  else if (ability.includes('кровопийство') || ability.includes('восстановление hp от урона')) {
-    // Восстанавливает 25% от нанесенного урона
-    const healAmount = Math.floor(attackResult.damage * 0.25);
-    attacker.currentHP = Math.min(attacker.maxHP, attacker.currentHP + healAmount);
-    abilityTriggered = true;
-    abilityMessage = `🩸 Кровопийство! +${healAmount} HP`;
-    console.log(`[VAMPIRE] Кровопийство сработало: урон=${attackResult.damage}, лечение=${healAmount}`);
-  }
-  
-  // Феникс - Возрождение: Воскрешение после смерти
+  // Феникс - Возрождение: +50% к восстановлению HP
   // Проверяется отдельно в checkPhoenixRevive при смерти
-  else if (ability.includes('возрождение') || ability.includes('воскрешение')) {
+  else if (ability.includes('возрождение') || ability.includes('восстановлению hp')) {
     // Способность обрабатывается в checkPhoenixRevive
   }
   
@@ -42,6 +37,15 @@ function applyRaceAbility(attacker, defender, attackResult, battleContext) {
       attackResult.damage = Math.floor(attackResult.damage * 1.15);
       abilityTriggered = true;
       abilityMessage = `😡 Ярость орка! Урон увеличен!`;
+    }
+  }
+  
+  // Оборотень - Звериная ярость: +30% урона при низком HP
+  else if (ability.includes('звериная ярость') || ability.includes('при низком hp')) {
+    if (attacker.currentHP < attacker.maxHP * 0.3) {
+      attackResult.damage = Math.floor(attackResult.damage * 1.30);
+      abilityTriggered = true;
+      abilityMessage = `🐺 Звериная ярость! +30% урона!`;
     }
   }
   
@@ -69,25 +73,22 @@ function applyRaceAbility(attacker, defender, attackResult, battleContext) {
     }
   }
   
-  // Драконорожденный - Драконье дыхание
-  else if (ability.includes('драконье дыхание') || ability.includes('дракон')) {
-    if (Math.random() < 0.15) {
-      attackResult.damage = Math.floor(attackResult.damage * 1.8);
+  // Драконорожденный - Огненное дыхание: +25% урона от огня
+  else if (ability.includes('огненное дыхание') || ability.includes('урона от огня')) {
+    if (Math.random() < 0.20) {
+      attackResult.damage = Math.floor(attackResult.damage * 1.25);
       abilityTriggered = true;
-      abilityMessage = `🐉 Драконье дыхание!`;
+      abilityMessage = `🔥 Огненное дыхание!`;
     }
   }
   
-  // Демон - Адское пламя: Урон со временем
-  else if (ability.includes('адское пламя') || ability.includes('адск')) {
+  // Демон - Адское пламя: +20% критического урона
+  else if (ability.includes('адское пламя') || ability.includes('критического урона')) {
     if (Math.random() < 0.20) {
-      const burnDamage = Math.floor(attackResult.damage * 0.3);
-      if (battleContext) {
-        battleContext.burnDamage = burnDamage;
-        battleContext.burnTurns = 2;
-      }
+      attackResult.damage = Math.floor(attackResult.damage * 1.20);
+      attackResult.critical = true;
       abilityTriggered = true;
-      abilityMessage = `🔥 Адское пламя! Противник горит (${burnDamage} урона/ход)`;
+      abilityMessage = `🔥 Адское пламя! Критический урон!`;
     }
   }
   
@@ -122,9 +123,9 @@ function applyRaceAbility(attacker, defender, attackResult, battleContext) {
     }
   }
   
-  // Кентавр - Скоростная атака: 25% шанс двойного удара
+  // Кентавр - Скоростная атака: 12% шанс двойного удара
   else if (ability.includes('скоростная атака') || ability.includes('двойного удара')) {
-    if (Math.random() < 0.25) {
+    if (Math.random() < 0.12) { // Уменьшен шанс до 12%
       attackResult.damage = Math.floor(attackResult.damage * 2);
       abilityTriggered = true;
       abilityMessage = `🏹 Скоростная атака! Двойной удар!`;
@@ -140,86 +141,52 @@ function applyRaceAbility(attacker, defender, attackResult, battleContext) {
     }
   }
   
-  // Элементаль - Стихийная мощь: Случайный элементальный урон
-  else if (ability.includes('стихийная мощь') || ability.includes('элементальный')) {
-    if (Math.random() < 0.30) {
-      const elements = ['🔥 Огонь', '❄️ Лед', '⚡ Молния', '🌪️ Ветер'];
-      const element = elements[Math.floor(Math.random() * elements.length)];
-      const multiplier = 1.2 + Math.random() * 0.6; // 1.2-1.8x
-      attackResult.damage = Math.floor(attackResult.damage * multiplier);
+  // Элементаль - Стихийная мощь: 25% шанс двойного урона
+  else if (ability.includes('стихийная мощь') || ability.includes('двойного урона')) {
+    if (Math.random() < 0.25) { // Увеличен шанс до 25%
+      attackResult.damage = Math.floor(attackResult.damage * 2);
       abilityTriggered = true;
-      abilityMessage = `${element} Стихийная мощь! x${multiplier.toFixed(1)}`;
+      abilityMessage = `⚡ Стихийная мощь! Двойной урон!`;
     }
   }
   
-  // Нежить - Нежизнь: Иммунитет к ядам и болезням
-  else if (ability.includes('нежизнь') || ability.includes('иммунитет')) {
-    // Пассивная способность, обрабатывается при получении урона
+  // Нежить - Нежизнь: +20% к HP и защите
+  else if (ability.includes('нежизнь') || ability.includes('к hp и защите')) {
+    // Пассивная способность - бонусы применяются при расчете статов
+    // Дополнительно: 15% шанс усиленной атаки
     if (Math.random() < 0.15) {
-      attackResult.damage = Math.floor(attackResult.damage * 1.1);
+      attackResult.damage = Math.floor(attackResult.damage * 1.2);
       abilityTriggered = true;
-      abilityMessage = `💀 Сила нежизни!`;
+      abilityMessage = `💀 Сила нежизни! +20% урона!`;
     }
   }
   
-  // Оборотень - Лунная ярость: +50% урона ночью
-  else if (ability.includes('лунная ярость') || ability.includes('ночью')) {
-    const hour = new Date().getHours();
-    const isNight = hour >= 20 || hour <= 6; // 20:00 - 06:00
-    if (isNight && Math.random() < 0.40) {
-      attackResult.damage = Math.floor(attackResult.damage * 1.50);
-      abilityTriggered = true;
-      abilityMessage = `🌙 Лунная ярость! Сила ночи!`;
-    }
-  }
-  
-  // Дракон - Драконья магия: Мощные заклинания
-  else if (ability.includes('драконья магия') || ability.includes('заклинания')) {
+  // Дракон - Драконья мощь: +40% ко всем характеристикам
+  else if (ability.includes('драконья мощь') || ability.includes('ко всем характеристикам')) {
+    // Пассивная способность - бонусы применяются при расчете статов
+    // Дополнительно: 12% шанс мощной атаки
     if (Math.random() < 0.12) {
-      const spells = [
-        { name: 'Метеор', multiplier: 2.2, emoji: '☄️' },
-        { name: 'Ледяная буря', multiplier: 1.8, emoji: '🌨️' },
-        { name: 'Цепная молния', multiplier: 2.0, emoji: '⚡' }
-      ];
-      const spell = spells[Math.floor(Math.random() * spells.length)];
-      attackResult.damage = Math.floor(attackResult.damage * spell.multiplier);
+      attackResult.damage = Math.floor(attackResult.damage * 1.8);
       abilityTriggered = true;
-      abilityMessage = `${spell.emoji} ${spell.name}! Драконья магия!`;
+      abilityMessage = `🐉 Драконья мощь! Мощная атака!`;
     }
   }
   
-  // Лич - Некромантия: Призыв мертвых союзников
-  else if (ability.includes('некромантия') || ability.includes('призыв')) {
+  // Лич - Темная магия: +35% к магическому урону
+  else if (ability.includes('темная магия') || ability.includes('к магическому урону')) {
     if (Math.random() < 0.18) {
-      attackResult.damage = Math.floor(attackResult.damage * 1.6);
-      const healAmount = Math.floor(attacker.maxHP * 0.1);
-      attacker.currentHP = Math.min(attacker.maxHP, attacker.currentHP + healAmount);
+      attackResult.damage = Math.floor(attackResult.damage * 1.35);
       abilityTriggered = true;
-      abilityMessage = `💀 Некромантия! Мертвые восстают! +${healAmount} HP`;
+      abilityMessage = `💀 Темная магия! +35% урона!`;
     }
   }
   
-  // Джинн - Исполнение желаний: Случайный мощный эффект
-  else if (ability.includes('исполнение желаний') || ability.includes('случайный')) {
-    if (Math.random() < 0.10) {
-      const wishes = [
-        { effect: 'damage', value: 2.5, message: '💫 Желание силы! Урон x2.5!' },
-        { effect: 'heal', value: 0.3, message: '✨ Желание исцеления! +30% HP!' },
-        { effect: 'shield', value: 3, message: '🛡️ Желание защиты! Щит на 3 хода!' }
-      ];
-      const wish = wishes[Math.floor(Math.random() * wishes.length)];
-      
-      if (wish.effect === 'damage') {
-        attackResult.damage = Math.floor(attackResult.damage * wish.value);
-      } else if (wish.effect === 'heal') {
-        const healAmount = Math.floor(attacker.maxHP * wish.value);
-        attacker.currentHP = Math.min(attacker.maxHP, attacker.currentHP + healAmount);
-      } else if (wish.effect === 'shield' && battleContext) {
-        battleContext.geniShield = wish.value;
-      }
-      
+  // Джинн - Магия желаний: 20% шанс тройного урона
+  else if (ability.includes('магия желаний') || ability.includes('тройного урона')) {
+    if (Math.random() < 0.20) {
+      attackResult.damage = Math.floor(attackResult.damage * 3);
       abilityTriggered = true;
-      abilityMessage = wish.message;
+      abilityMessage = `✨ Магия желаний! Тройной урон!`;
     }
   }
   
@@ -270,10 +237,18 @@ function applyDefensiveAbility(defender, incomingDamage, battleContext) {
     battleContext.geniShield--;
   }
   
-  // Нежить - иммунитет к ядам и эффектам
-  else if (defender.specialAbility && defender.specialAbility.toLowerCase().includes('иммунитет')) {
+  // Ангел - Божественная защита: +15% к защите
+  else if (ability.includes('божественная защита') || ability.includes('к защите')) {
+    if (Math.random() < 0.25) { // 25% шанс
+      damageReduction = Math.floor(incomingDamage * 0.15);
+      abilityMessage = `✨ Божественная защита! -${damageReduction} урона`;
+    }
+  }
+  
+  // Нежить - дополнительная защита
+  else if (defender.specialAbility && defender.specialAbility.toLowerCase().includes('нежизнь')) {
     if (Math.random() < 0.20) {
-      damageReduction = Math.floor(incomingDamage * 0.25);
+      damageReduction = Math.floor(incomingDamage * 0.20);
       abilityMessage = `💀 Нежизнь! Сопротивление урону!`;
     }
   }
@@ -358,6 +333,20 @@ function applyStatBonus(player) {
     player.defense = Math.floor(player.defense * 1.10);
   }
   
+  // Нежить - Нежизнь: +20% к HP и защите
+  if (ability.includes('нежизнь') && ability.includes('к hp и защите')) {
+    player.maxHP = Math.floor(player.maxHP * 1.20);
+    player.defense = Math.floor(player.defense * 1.20);
+  }
+  
+  // Дракон - Драконья мощь: +40% ко всем характеристикам
+  if (ability.includes('драконья мощь') && ability.includes('ко всем характеристикам')) {
+    player.power = Math.floor(player.power * 1.40);
+    player.maxHP = Math.floor(player.maxHP * 1.40);
+    player.attack = Math.floor(player.attack * 1.40);
+    player.defense = Math.floor(player.defense * 1.40);
+  }
+  
   return player;
 }
 
@@ -428,7 +417,7 @@ function modifyDamageWithItems(damage, itemEffects, isAttacker) {
       if (effect.includes('fire_damage_')) {
         const bonus = parseInt(effect.split('_')[2]) || 25;
         modifiedDamage = Math.floor(modifiedDamage * (1 + bonus / 100));
-        messages.push(`🔥 Огненный урон: +${bonus}%`);
+        messages.push(`🔥 Пламенный клинок: +${bonus}% урона`);
       }
       
       if (effect === 'shadow_strike') {
@@ -441,7 +430,7 @@ function modifyDamageWithItems(damage, itemEffects, isAttacker) {
       if (effect.includes('holy_damage_')) {
         const bonus = parseInt(effect.split('_')[2]) || 50;
         modifiedDamage = Math.floor(modifiedDamage * (1 + bonus / 100));
-        messages.push(`✨ Святой урон: +${bonus}%`);
+        messages.push(`✨ Экскалибур: +${bonus}% урона`);
       }
     } else {
       // Защитные эффекты

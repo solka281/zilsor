@@ -384,7 +384,7 @@ async function createDirectSale() {
             return;
         }
         
-        const itemId = selectedItem.item_id || selectedItem.id;
+        const itemId = selectedItem.inventory_id || selectedItem.id;
         
         const response = await fetch(`${API_BASE}/sell`, {
             method: 'POST',
@@ -435,7 +435,7 @@ async function createAuction() {
             return;
         }
         
-        const itemId = selectedItem.item_id || selectedItem.id;
+        const itemId = selectedItem.inventory_id || selectedItem.id;
         
         console.log('Creating auction:', {
             userId: user.id,
@@ -820,7 +820,11 @@ async function makeBid() {
         const result = await response.json();
         
         if (response.ok && result.success) {
-            showNotification(result.message || 'Ставка сделана!');
+            let message = result.message || 'Ставка сделана!';
+            if (result.timeExtended) {
+                message += ' ⏰ Аукцион продлен на 5 минут!';
+            }
+            showNotification(message);
             await loadAuctionsData();
             await loadUserData();
             closeModal();

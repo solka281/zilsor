@@ -105,6 +105,36 @@ db.serialize(() => {
         }
       });
       
+      // Таблица для отслеживания убитых боссов
+      db.run(`CREATE TABLE IF NOT EXISTS killed_bosses (
+        user_id INTEGER,
+        boss_level INTEGER,
+        killed_at INTEGER,
+        PRIMARY KEY (user_id, boss_level),
+        FOREIGN KEY (user_id) REFERENCES players (user_id)
+      )`, (err) => {
+        if (err) {
+          console.error('Ошибка создания таблицы killed_bosses:', err.message);
+        } else {
+          console.log('✅ Таблица killed_bosses создана');
+        }
+      });
+      
+      // Таблица для кулдаунов боссов
+      db.run(`CREATE TABLE IF NOT EXISTS boss_cooldowns (
+        user_id INTEGER,
+        boss_level INTEGER,
+        last_attempt INTEGER,
+        PRIMARY KEY (user_id, boss_level),
+        FOREIGN KEY (user_id) REFERENCES players (user_id)
+      )`, (err) => {
+        if (err) {
+          console.error('Ошибка создания таблицы boss_cooldowns:', err.message);
+        } else {
+          console.log('✅ Таблица boss_cooldowns создана');
+        }
+      });
+      
       db.run(`ALTER TABLE players ADD COLUMN current_forest_enemy TEXT DEFAULT NULL`, (err) => {
         if (err && !err.message.includes('duplicate column')) {
           console.error('Ошибка добавления current_forest_enemy:', err.message);
@@ -184,6 +214,22 @@ db.serialize(() => {
     obtained_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`, (err) => {
     if (err) console.error('Ошибка создания таблицы inventory:', err);
+  });
+
+  // Таблица настроек автопродажи
+  db.run(`CREATE TABLE IF NOT EXISTS auto_sell_settings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    player_id INTEGER UNIQUE,
+    common_enabled INTEGER DEFAULT 0,
+    rare_enabled INTEGER DEFAULT 0,
+    epic_enabled INTEGER DEFAULT 0,
+    mythic_enabled INTEGER DEFAULT 0,
+    legendary_enabled INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (player_id) REFERENCES players (user_id)
+  )`, (err) => {
+    if (err) console.error('Ошибка создания таблицы auto_sell_settings:', err);
+    else console.log('✅ Таблица auto_sell_settings создана');
   });
 
   // Таблица кланов

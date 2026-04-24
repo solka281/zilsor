@@ -19,8 +19,14 @@ const potions = require('./potions');
 const dailyQuests = require('./daily_quests');
 const raids = require('./raids');
 const marketplaceAPI = require('./marketplace_api');
+const autoSell = require('./auto_sell');
+const { smartFormat } = require('./number_formatter');
 
 const bot = new TelegramBot(config.BOT_TOKEN, { polling: true });
+
+// Устанавливаем глобальную переменную для доступа из других модулей
+global.telegramBot = bot;
+console.log('🤖 Глобальная переменная telegramBot установлена:', !!global.telegramBot);
 
 // Express сервер для маркетплейса
 const express = require('express');
@@ -36,13 +42,20 @@ app.use(express.static('marketplace'));
 // API маркетплейса
 app.use('/api/marketplace', marketplaceAPI.router);
 
+// API wiki
+const wikiAPI = require('./wiki_api');
+app.use('/api/wiki', wikiAPI);
+
 // Главная страница для проверки
 app.get('/', (req, res) => {
   res.send(`
-    <h1>🏪 Zilsor Race Marketplace</h1>
-    <p>Маркетплейс работает!</p>
+    <h1>🏪 Zilsor Race</h1>
+    <p>Игровой сервер работает!</p>
     <p>Сервер запущен на порту ${PORT}</p>
-    <a href="/marketplace">Открыть маркетплейс</a>
+    <div style="margin: 20px 0;">
+      <a href="/marketplace" style="display: inline-block; margin: 10px; padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px;">🏪 Маркетплейс</a>
+      <a href="/wiki" style="display: inline-block; margin: 10px; padding: 10px 20px; background: #6f42c1; color: white; text-decoration: none; border-radius: 5px;">📚 Wiki энциклопедия</a>
+    </div>
   `);
 });
 
@@ -55,6 +68,14 @@ app.get('/health', (req, res) => {
 app.get('/marketplace', (req, res) => {
   res.sendFile(__dirname + '/marketplace/index.html');
 });
+
+// Wiki энциклопедия
+app.get('/wiki', (req, res) => {
+  res.sendFile(__dirname + '/wiki/index.html');
+});
+
+// Статические файлы для wiki
+app.use('/wiki', express.static('wiki'));
 
 // Запуск сервера
 app.listen(PORT, '0.0.0.0', () => {
@@ -465,6 +486,98 @@ function formatCooldownMessage(actionName, cooldown) {
   return `❌ ${actionName} недоступно!\n⏰ Можно использовать через ${cooldown.remaining}`;
 }
 
+// Получить кулдаун для действия
+function getCooldown(userId, actionType) {
+  // Используем существующую систему кулдаунов через базу данных
+  return new Promise((resolve) => {
+    let columnName;
+    let cooldownSeconds;
+    
+    switch (actionType) {
+      case 'forest':
+        columnName = 'last_forest_time';
+        cooldownSeconds = 10; // 10 секунд
+        break;
+      case 'duel':
+        // Кулдаун на дуэли убран
+        resolve({ ready: true });
+        return;
+      case 'work':
+        columnName = 'last_work_time';
+        cooldownSeconds = 3600; // 1 час
+        break;
+      default:
+        resolve({ ready: true });
+        return;
+    }
+    
+    db.get(`SELECT ${columnName} FROM players WHERE user_id = ?`, [userId], (err, player) => {
+      if (err || !player) {
+        resolve({ ready: true });
+        return;
+      }
+      
+      const lastTime = player[columnName] || 0;
+      const cooldownResult = checkCooldown(lastTime, cooldownSeconds);
+      resolve(cooldownResult);
+    });
+  });
+}
+
+// Установить кулдаун для действия
+function setCooldown(userId, actionType, seconds) {
+  let columnName;
+  
+  switch (actionType) {
+    case 'forest':
+      columnName = 'last_forest_time';
+      break;
+    case 'duel':
+      // Кулдаун на дуэли убран - ничего не делаем
+      return;
+    case 'work':
+      columnName = 'last_work_time';
+      break;
+    default:
+      return;
+  }
+  
+  const now = Math.floor(Date.now() / 1000);
+  db.run(`UPDATE players SET ${columnName} = ? WHERE user_id = ?`, [now, userId], (err) => {
+    if (err) {
+      console.error(`Ошибка установки кулдауна ${actionType}:`, err);
+    }
+  });
+}
+
+// Проверить кулдаун босса
+function getBossCooldown(userId, bossLevel) {
+  return new Promise((resolve) => {
+    db.get(`SELECT last_attempt FROM boss_cooldowns WHERE user_id = ? AND boss_level = ?`, 
+      [userId, bossLevel], (err, row) => {
+      if (err || !row) {
+        resolve({ ready: true });
+        return;
+      }
+      
+      const lastTime = row.last_attempt || 0;
+      const cooldownResult = checkCooldown(lastTime, 600); // 10 минут = 600 секунд
+      resolve(cooldownResult);
+    });
+  });
+}
+
+// Установить кулдаун босса
+function setBossCooldown(userId, bossLevel) {
+  const now = Math.floor(Date.now() / 1000);
+  db.run(`INSERT OR REPLACE INTO boss_cooldowns (user_id, boss_level, last_attempt) VALUES (?, ?, ?)`,
+    [userId, bossLevel, now], (err) => {
+      if (err) {
+        console.error('Ошибка установки кулдауна босса:', err);
+      }
+    });
+}
+
 // Отправка логов в канал
 function sendLogMessage(message, type = 'INFO') {
   if (!config.LOG_CHANNEL_ID) {
@@ -537,17 +650,27 @@ function startPvPBattle(player1Id, player2Id) {
       const battle = battleSystem.createPvPBattle(player1Id, p1Stats, player2Id, p2Stats);
       
       // Уведомляем обоих игроков
+      const speedComparison = p1Stats.speed > p2Stats.speed ? 
+        `🏃 ${p1Stats.username} быстрее (${p1Stats.speed} vs ${p2Stats.speed}) - ходит первым!` :
+        p2Stats.speed > p1Stats.speed ?
+        `🏃 ${p2Stats.username} быстрее (${p2Stats.speed} vs ${p1Stats.speed}) - ходит первым!` :
+        `⚖️ Равная скорость (${p1Stats.speed}) - порядок случайный!`;
+      
       bot.sendMessage(player1Id, 
         `⚔️ Дуэль началась!\n\n` +
         `Противник: ${p2Stats.username}\n` +
-        `Уровень: ${p2Stats.level}\n\n` +
+        `Уровень: ${p2Stats.level}\n` +
+        `Раса: ${p2Stats.raceName}\n\n` +
+        `${speedComparison}\n\n` +
         `Приготовьтесь к бою!`
       );
       
       bot.sendMessage(player2Id,
         `⚔️ Дуэль началась!\n\n` +
         `Противник: ${p1Stats.username}\n` +
-        `Уровень: ${p1Stats.level}\n\n` +
+        `Уровень: ${p1Stats.level}\n` +
+        `Раса: ${p1Stats.raceName}\n\n` +
+        `${speedComparison}\n\n` +
         `Приготовьтесь к бою!`
       );
       
@@ -633,11 +756,12 @@ function showBattleScreen(userId, chatId, messageId) {
           return;
         }
         
-        const forestLevel = player.forest_level || 1;
+        const battle = battleSystem.getBattle(userId);
+        
+        // Используем selectedLevel из приключения или текущий forestLevel
+        const forestLevel = (battle && battle.selectedLevel) ? battle.selectedLevel : (player.forest_level || 1);
         const location = monsters.getLocationByLevel(forestLevel);
         
-        // Проверяем это босс или обычный моб
-        const battle = battleSystem.getBattle(userId);
         let imagePath = location.image;
         
         // Если это босс - используем изображение босса
@@ -718,9 +842,9 @@ function handlePvPBattleEnd(player1Id, player2Id, winnerId) {
       const mmrText = mmrChange > 0 ? `+${mmrChange}` : `${mmrChange}`;
       const mmrColor = mmrChange > 0 ? '📈' : '📉';
       
-      // Обновляем только время последней дуэли (убираем золото и опыт)
-      db.run(`UPDATE players SET last_duel_time = ? WHERE user_id = ?`,
-        [now, playerId], () => {
+      // Обновляем статистику игрока (убираем обновление времени дуэли)
+      db.run(`UPDATE players SET wins = wins + ?, losses = losses + ? WHERE user_id = ?`,
+        [isWinner ? 1 : 0, isWinner ? 0 : 1, playerId], () => {
           
           // Обновляем прогресс квестов
           if (isWinner) {
@@ -814,7 +938,15 @@ function getProgressBar(current, total) {
   return bar;
 }
 
-// Функция applyAwakeningBonus удалена - бонусы пробуждения отключены
+// Функция применения бонусов пробуждения
+function applyAwakeningBonus(gold, exp, awakeningLevel) {
+  const multiplier = 1 + (awakeningLevel * 0.1);
+  return {
+    gold: Math.floor(gold * multiplier),
+    exp: Math.floor(exp * multiplier),
+    multiplier: multiplier
+  };
+}
 
 // Вспомогательная функция для логирования с информацией об игроке
 function logWithPlayer(message, userId, callback) {
@@ -870,23 +1002,61 @@ function handleBattleEnd(userId, victory) {
       expReward = raceAbilities.modifyExpWithItems(expReward, battle.playerStats.itemEffects);
     }
     
-    // Применяем бонусы пробуждения к золоту и опыту - УДАЛЕНО
-    // const awakeningBonus = applyAwakeningBonus(goldReward, expReward, player.awakening_level);
-    // goldReward = awakeningBonus.gold;
-    // expReward = awakeningBonus.exp;
+    // Уменьшаем награды от повторных боссов до минимума (ПЕРЕД применением бонусов пробуждения)
+    if (battle.isBossRerun && victory) {
+      goldReward = Math.floor(goldReward * 0.05); // 5% от обычной награды
+      expReward = Math.floor(expReward * 0.05);   // 5% от обычной награды
+    }
     
-    const crystalReward = victory && enemy.isBoss ? enemy.crystalReward : 0;
+    // Применяем бонусы пробуждения к золоту и опыту
+    const awakeningLevel = player.awakening_level || 0;
+    if (awakeningLevel > 0) {
+      const awakeningBonus = applyAwakeningBonus(goldReward, expReward, awakeningLevel);
+      goldReward = awakeningBonus.gold;
+      expReward = awakeningBonus.exp;
+      console.log(`[AWAKENING] Применены бонусы: уровень=${awakeningLevel}, множитель=x${awakeningBonus.multiplier.toFixed(1)}, золото=${goldReward}, опыт=${expReward}`);
+    }
+    
+    const crystalReward = victory && enemy.isBoss && !battle.isBossRerun ? enemy.crystalReward : 0;
     
     const now = Math.floor(Date.now() / 1000);
     
     console.log(`💰 Награды: gold=${goldReward}, exp=${expReward}, crystals=${crystalReward}`);
     
-    // Повышаем уровень леса и очищаем врага ТОЛЬКО при победе
-    const forestLevelUp = victory ? 1 : 0;
+    // Повышаем уровень леса ТОЛЬКО если это текущий максимальный уровень игрока
+    let forestLevelUp = 0;
+    if (victory && battle.selectedLevel) {
+      // Если это приключение и уровень равен текущему максимальному - повышаем
+      if (battle.selectedLevel === (player.forest_level || 1)) {
+        forestLevelUp = 1;
+      }
+    } else if (victory && !battle.selectedLevel) {
+      // Старая система (обычный лес) - всегда повышаем
+      forestLevelUp = 1;
+    }
+    
     const clearEnemy = victory ? null : player.current_forest_enemy;
     
     // Функция для отправки результата
     const sendBattleResult = (droppedItem) => {
+      // Если это босс и первое убийство - записываем в killed_bosses
+      if (victory && enemy.isBoss && !battle.isBossRerun) {
+        db.run(`INSERT OR REPLACE INTO killed_bosses (user_id, boss_level, killed_at) VALUES (?, ?, ?)`,
+          [userId, battle.selectedLevel || (player.forest_level || 1), now], (err) => {
+            if (err) {
+              console.error('Ошибка записи убитого босса:', err);
+            } else {
+              console.log(`✅ Босс уровня ${battle.selectedLevel || (player.forest_level || 1)} записан как убитый`);
+            }
+          });
+      }
+      
+      // Определяем награды: при поражении от повторного моба/босса - нет наград
+      const isRepeatFight = battle.isBossRerun || (battle.selectedLevel && battle.selectedLevel < (player.forest_level || 1));
+      const actualGoldReward = (!victory && isRepeatFight) ? 0 : goldReward;
+      const actualExpReward = (!victory && isRepeatFight) ? 0 : expReward;
+      const actualCrystalReward = (!victory && isRepeatFight) ? 0 : crystalReward;
+      
       // Обновляем игрока
       db.run(`UPDATE players SET 
               last_forest_time = ?,
@@ -896,7 +1066,7 @@ function handleBattleEnd(userId, victory) {
               forest_level = forest_level + ?,
               current_forest_enemy = ?
               WHERE user_id = ?`,
-        [now, goldReward, expReward, crystalReward, forestLevelUp, clearEnemy, userId],
+        [now, actualGoldReward, actualExpReward, actualCrystalReward, forestLevelUp, clearEnemy, userId],
         (err) => {
           if (err) {
             console.error('❌ Ошибка обновления после боя:', err);
@@ -907,8 +1077,8 @@ function handleBattleEnd(userId, victory) {
           
           // Получаем обновленные данные игрока
           db.get(`SELECT gold, exp FROM players WHERE user_id = ?`, [userId], (err, updatedPlayer) => {
-            const currentGold = updatedPlayer ? updatedPlayer.gold : (player.gold + goldReward);
-            const currentExp = updatedPlayer ? updatedPlayer.exp : (player.exp + expReward);
+            const currentGold = updatedPlayer ? updatedPlayer.gold : (player.gold + actualGoldReward);
+            const currentExp = updatedPlayer ? updatedPlayer.exp : (player.exp + actualExpReward);
             
             const newForestLevel = (player.forest_level || 1) + (victory ? 1 : 0);
             const resultEmoji = victory ? '🎉' : '💀';
@@ -923,15 +1093,32 @@ function handleBattleEnd(userId, victory) {
               message += ` повержен!\n🌲 Уровень леса: ${newForestLevel}\n\n`;
             } else {
               message += ` победил!\n🌲 Уровень леса: ${player.forest_level || 1} (не изменился)\n\n`;
-              message += `💡 Возвращайтесь через 30 секунд чтобы попробовать снова!\n\n`;
+              if (!isRepeatFight) {
+                message += `💡 Возвращайтесь через 30 секунд чтобы попробовать снова!\n\n`;
+              }
             }
             
-            message += 
-              `💰 Золото: +${goldReward} (${currentGold}💰)\n` +
-              `✨ Опыт: +${expReward} (${currentExp}✨)\n`;
+            if (actualGoldReward > 0 || actualExpReward > 0) {
+              message += 
+                `💰 Золото: +${smartFormat(actualGoldReward)} (${smartFormat(currentGold)}💰)\n` +
+                `✨ Опыт: +${smartFormat(actualExpReward)} (${smartFormat(currentExp)}✨)\n`;
+              
+              // Показываем множитель если есть пробуждение
+              if (player.awakening_level > 0) {
+                const multiplier = 1 + (player.awakening_level * 0.1);
+                message += `🌟 Бонус пробуждения: x${multiplier.toFixed(1)}\n`;
+              }
+              
+              // Показываем информацию о уменьшенных наградах от повторного босса
+              if (battle.isBossRerun && victory) {
+                message += `📉 Награды уменьшены (повторный босс)\n`;
+              }
+            } else if (!victory && isRepeatFight) {
+              message += `❌ Награды не получены (повторный бой)\n\n`;
+            }
             
-            if (crystalReward > 0) {
-              message += `💎 Кристаллы: +${crystalReward}\n`;
+            if (actualCrystalReward > 0) {
+              message += `💎 Кристаллы: +${actualCrystalReward}\n`;
             }
             
             if (droppedItem) {
@@ -940,8 +1127,25 @@ function handleBattleEnd(userId, victory) {
               message += `\n🎁 *Выпал предмет!*\n${rarityIcon} ${droppedItem.name}${itemStats}`;
             }
             
+            // Создаем кнопки в зависимости от результата
+            const buttons = [];
+            if (victory) {
+              // При победе - кнопка "Следующий уровень" с текущим уровнем боя
+              const currentBattleLevel = battle.selectedLevel || (player.forest_level || 1);
+              buttons.push([{ text: '➡️ Следующий уровень', callback_data: `next_level_auto_${currentBattleLevel}` }]);
+            } else {
+              // При поражении - кнопка "Заново"
+              buttons.push([{ text: '🔄 Заново', callback_data: 'adventure_menu' }]);
+            }
+            buttons.push([{ text: '🏠 Главное меню', callback_data: 'main_menu' }]);
+            
             bot.sendMessage(userId, message,
-              { parse_mode: 'Markdown', ...getMainMenu(true) }
+              { 
+                parse_mode: 'Markdown',
+                reply_markup: {
+                  inline_keyboard: buttons
+                }
+              }
             ).then(() => {
               console.log(`✅ Сообщение отправлено`);
             }).catch(err => {
@@ -1000,8 +1204,10 @@ function handleBattleEnd(userId, victory) {
         });
     };
     
-    // Проверяем дроп предмета (с боссов и обычных мобов)
-    if (victory && enemy.itemDropChance && Math.random() < enemy.itemDropChance) {
+    // Проверяем дроп предмета
+    // Убираем дроп предмета от повторных боссов
+    const isRepeatBoss = enemy.isBoss && battle.isBossRerun;
+    if (victory && enemy.itemDropChance && !isRepeatBoss && Math.random() < enemy.itemDropChance) {
       // Моб дропнул предмет!
       const items = require('./items');
       items.getRandomItem((err, item) => {
@@ -1027,6 +1233,28 @@ function handleBattleEnd(userId, victory) {
     } else {
       sendBattleResult(null);
     }
+  });
+}
+
+// Начать бой в приключении
+function startAdventureBattle(userId, player, enemy, selectedLevel, isBossRerun) {
+  const duels = require('./duels');
+  
+  duels.calculatePlayerPower(userId, (err, playerStats) => {
+    if (err) {
+      console.error('Ошибка получения статов игрока:', err);
+      return bot.sendMessage(userId, '❌ Ошибка получения данных игрока');
+    }
+    
+    // Создаем бой
+    const battle = battleSystem.createBattle(userId, playerStats, enemy);
+    
+    // Добавляем информацию о выбранном уровне
+    battle.selectedLevel = selectedLevel;
+    battle.isBossRerun = isBossRerun;
+    
+    // Показываем экран боя (как в обычном лесу)
+    showBattleScreen(userId, userId, null);
   });
 }
 
@@ -1062,31 +1290,29 @@ function conductDuelAndNotify(player1Id, player2Id) {
         const mmrText = mmrChange > 0 ? `+${mmrChange}` : `${mmrChange}`;
         const mmrColor = mmrChange > 0 ? '📈' : '📉';
         
-        db.run(`UPDATE players SET last_duel_time = ? WHERE user_id = ?`,
-          [now, playerId], () => {
-            
-            bot.sendMessage(playerId,
-              `${battleText}\n\n` +
-              `━━━━━━━━━━━━━━━━━━━━\n` +
-              `${resultText}\n\n` +
-              `🏆 MMR: ${mmrColor} ${mmrText} (${newMMR})\n\n` +
-              `⚔️ Раундов: ${duelResult.rounds}`,
-              { parse_mode: 'Markdown', ...getMainMenu(true) }
-            );
-            
-            checkLevelUp(playerId);
-            
-            if (isWinner) {
-              achievements.checkAchievements(playerId, (err, newAchs) => {
-                if (newAchs && newAchs.length > 0) {
-                  newAchs.forEach(ach => {
-                    bot.sendMessage(playerId, 
-                      `${ach.icon} Достижение: ${ach.name}\n💰 +${ach.reward_gold} золота`);
-                  });
-                }
+        // Убираем обновление времени дуэли - кулдауна больше нет
+        
+        bot.sendMessage(playerId,
+          `${battleText}\n\n` +
+          `━━━━━━━━━━━━━━━━━━━━\n` +
+          `${resultText}\n\n` +
+          `🏆 MMR: ${mmrColor} ${mmrText} (${newMMR})\n\n` +
+          `⚔️ Раундов: ${duelResult.rounds}`,
+          { parse_mode: 'Markdown', ...getMainMenu(true) }
+        );
+        
+        checkLevelUp(playerId);
+        
+        if (isWinner) {
+          achievements.checkAchievements(playerId, (err, newAchs) => {
+            if (newAchs && newAchs.length > 0) {
+              newAchs.forEach(ach => {
+                bot.sendMessage(playerId, 
+                  `${ach.icon} Достижение: ${ach.name}\n💰 +${ach.reward_gold} золота`);
               });
             }
           });
+        }
       });
       
       // Очищаем активные матчи
@@ -1163,7 +1389,7 @@ function getBattleMenu() {
       inline_keyboard: [
         [
           { text: '⚔️ Дуэль', callback_data: 'duel' },
-          { text: '🌲 Темный лес', callback_data: 'dark_forest' }
+          { text: '🗺️ Прохождение', callback_data: 'adventure_menu' }
         ],
         [
           { text: '🎁 Найти предмет', callback_data: 'loot' }
@@ -1522,7 +1748,7 @@ function showRaidBossSelection(chatId, messageId, currentIndex = 0, userId, admi
               `🌪️ ${boss.name}\n` +
               `⭐ Уровень: ${boss.level}\n` +
               `📝 ${boss.description}\n${requirementsText}${specialRewardsText}\n` +
-              `❤️ HP: ${activeRaid.current_hp.toLocaleString()}/${activeRaid.boss_hp.toLocaleString()}\n` +
+              `❤️ HP: ${smartFormat(activeRaid.current_hp)}/${smartFormat(activeRaid.boss_hp)}\n` +
               `🏆 Побед: ${boss.times_defeated}\n` +
               `⏰ Осталось: ${timeLeft} мин\n\n` +
               `💰 Награды (делятся по урону):\n`;
@@ -1599,8 +1825,8 @@ function showRaidBossSelection(chatId, messageId, currentIndex = 0, userId, admi
             `🌪️ ${boss.name}\n` +
             `⭐ Уровень: ${boss.level}\n` +
             `📝 ${boss.description}\n${requirementsText}${specialRewardsText}\n` +
-            `❤️ HP: ${totalHP.toLocaleString()}\n` +
-            `🏆 Побед: ${boss.times_defeated} (+${hpBonus.toLocaleString()} HP)\n` +
+            `❤️ HP: ${smartFormat(totalHP)}\n` +
+            `🏆 Побед: ${boss.times_defeated} (+${smartFormat(hpBonus)} HP)\n` +
             `⏰ Кулдаун: ${boss.cooldown_hours || 2} часов\n\n` +
             `💰 Награды (делятся по урону):\n`;
           
@@ -1722,7 +1948,7 @@ function showRaidBattleMenu(chatId, messageId, raidId, userId) {
       let message = `⚔️ *БИТВА С БОССОМ*\n\n` +
         `🐉 ${raid.boss_name} (Ур.${raid.boss_level})\n` +
         `⏰ Осталось: ${timeLeft} мин\n\n` +
-        `❤️ HP: ${raid.current_hp.toLocaleString()}/${raid.boss_hp.toLocaleString()} (${hpPercent}%)\n` +
+        `❤️ HP: ${smartFormat(raid.current_hp)}/${smartFormat(raid.boss_hp)} (${hpPercent}%)\n` +
         `${hpBar}\n\n`;
       
       if (participants.length > 0) {
@@ -1876,6 +2102,7 @@ bot.onText(/\/help/, async (msg) => {
 /start - Начать игру
 /menu - Главное меню
 /profile - Ваш профиль
+/speed - Анализ скорости
 /help - Эта справка
 
 💡 Все остальные действия доступны через кнопки в меню!
@@ -2294,9 +2521,9 @@ bot.onText(/\/playerinfo(?:\s+(.+))?/, async (msg, match) => {
         `💎 VIP: ${player.is_vip ? 'Да' : 'Нет'}\n\n` +
         `🧬 Раса: ${raceName} (${raceRarity})\n` +
         `⭐ Уровень: ${player.level}\n` +
-        `✨ Опыт: ${player.exp}\n\n` +
-        `💰 Золото: ${player.gold}\n` +
-        `💎 Кристаллы: ${player.crystals}\n\n` +
+        `✨ Опыт: ${smartFormat(player.exp)}\n\n` +
+        `💰 Золото: ${smartFormat(player.gold)}\n` +
+        `💎 Кристаллы: ${smartFormat(player.crystals)}\n\n` +
         `🏆 Побед: ${player.wins}\n` +
         `💀 Поражений: ${player.losses}\n` +
         `🎯 MMR: ${player.mmr || 0}\n\n` +
@@ -3715,6 +3942,57 @@ bot.on('photo', (msg) => {
   }
 });
 
+bot.onText(/\/speed/, async (msg) => {
+  const userId = msg.from.id;
+  
+  // Проверяем подписку
+  const isSubscribed = await requireSubscription(userId, msg.chat.id);
+  if (!isSubscribed) return;
+  
+  // Получаем статы игрока
+  duels.calculatePlayerPower(userId, (err, stats) => {
+    if (err) {
+      return bot.sendMessage(userId, '❌ Ошибка получения данных');
+    }
+    
+    if (!stats.raceName) {
+      return bot.sendMessage(userId, '❌ Сначала выберите расу!');
+    }
+    
+    const speedSystem = require('./speed_system');
+    const speedDesc = speedSystem.getSpeedDescription(stats.speed);
+    
+    let message = `🏃 **АНАЛИЗ СКОРОСТИ**\n\n`;
+    message += `👤 **${stats.username}**\n`;
+    message += `🧬 Раса: ${stats.raceName}\n`;
+    message += `📊 Уровень: ${stats.level}\n\n`;
+    
+    message += `⚡ **Итоговая скорость: ${stats.speed}**\n`;
+    message += `${speedDesc}\n\n`;
+    
+    if (stats.speedBreakdown) {
+      message += `📋 **Детализация:**\n`;
+      message += `• Базовая скорость расы: ${stats.speedBreakdown.baseSpeed}\n`;
+      message += `• Бонус от уровня: +${stats.speedBreakdown.levelBonus}\n`;
+      if (stats.speedBreakdown.itemSpeedBonus > 0) {
+        message += `• Бонус от предметов: +${stats.speedBreakdown.itemSpeedBonus}\n`;
+      }
+    }
+    
+    message += `\n💡 **Как работает скорость:**\n`;
+    message += `• В PvP дуэлях быстрый игрок ходит первым\n`;
+    message += `• Скорость влияет на шанс крита и уклонения\n`;
+    message += `• Очень быстрые игроки могут атаковать дважды\n\n`;
+    
+    message += `🏆 **Топ-3 самых быстрых рас:**\n`;
+    message += `1. 🐎 Кентавр (140 + уровень)\n`;
+    message += `2. 🐺 Оборотень (135 + уровень)\n`;
+    message += `3. 🔥 Феникс (130 + уровень)`;
+    
+    bot.sendMessage(userId, message, { parse_mode: 'Markdown' });
+  });
+});
+
 bot.onText(/\/profile/, async (msg) => {
   const userId = msg.from.id;
   
@@ -3738,15 +4016,15 @@ bot.onText(/\/profile/, async (msg) => {
           `🆔 ID: ${player.user_id}\n` +
           `👤 Имя: ${player.username}\n` +
           `📊 Уровень: ${player.level}\n` +
-          `✨ Опыт: ${player.exp}/${Math.floor(expNeeded)}\n` +
-          `💰 Золото: ${player.gold}\n\n` +
+          `✨ Опыт: ${smartFormat(player.exp)}/${smartFormat(Math.floor(expNeeded))}\n` +
+          `💰 Золото: ${smartFormat(player.gold)}\n\n` +
           `${rarityIcon} Раса: ${race.name} (${config.RARITY[race.rarity].name})\n` +
           `🌟 Пробуждение: ${player.awakening_level}\n\n` +
           `⚔️ Боевые характеристики:\n` +
-          `⚡ Сила: ${stats.power}\n` +
-          `❤️ HP: ${stats.hp}\n` +
-          `🗡️ Атака: ${stats.attack}\n` +
-          `🛡️ Защита: ${stats.defense}\n\n` +
+          `⚡ Сила: ${smartFormat(stats.power)}\n` +
+          `❤️ HP: ${smartFormat(stats.hp)}\n` +
+          `🗡️ Атака: ${smartFormat(stats.attack)}\n` +
+          `🛡️ Защита: ${smartFormat(stats.defense)}\n\n` +
           `🏆 Статистика:::\n` +
           `✅ Побед: ${player.wins}\n` +
           `❌ Поражений: ${player.losses}\n` +
@@ -3820,10 +4098,10 @@ bot.onText(/\/loot/, (msg) => {
           `⭐ Редкость: ${config.RARITY[item.rarity].name}\n` +
           `🎒 Тип: ${item.type}\n\n` +
           `Бонусы:\n` +
-          `⚡ Сила: +${item.power_bonus}\n` +
-          `❤️ HP: +${item.hp_bonus}\n` +
-          `🗡️ Атака: +${item.attack_bonus}\n` +
-          `🛡️ Защита: +${item.defense_bonus}`
+          `⚡ Сила: +${smartFormat(item.power_bonus)}\n` +
+          `❤️ HP: +${smartFormat(item.hp_bonus)}\n` +
+          `🗡️ Атака: +${smartFormat(item.attack_bonus)}\n` +
+          `🛡️ Защита: +${smartFormat(item.defense_bonus)}`
         );
         
         // Добавляем опыт
@@ -4121,7 +4399,7 @@ bot.on('callback_query', async (query) => {
         if (!player.race_id) {
           editImageWithText(chatId, messageId, 'main_menu.jpg',
             `🎮 Добро пожаловать!\n\n` +
-            `💎 Кристаллы: ${player.crystals}\n\n` +
+            `💎 Кристаллы: ${smartFormat(player.crystals)}\n\n` +
             `🎰 Получите свою первую расу!`,
             getMainMenu(false)
           );
@@ -4695,6 +4973,9 @@ bot.on('callback_query', async (query) => {
             
             const elementsText = stats.elements && stats.elements.length > 0 ? `\n🌟 Элементы: ${stats.elements.join(' ')}` : '';
             const raceImage = getRaceImageName(race.name);
+            // Получаем описание скорости
+            const speedSystem = require('./speed_system');
+            const speedDescription = speedSystem.getSpeedDescription(stats.speed);
             
             // Отправляем профиль с изображением расы
             editImageWithText(chatId, messageId, `races/${raceImage}`,
@@ -4704,8 +4985,9 @@ bot.on('callback_query', async (query) => {
               `💰 ${player.gold} | 💎 ${player.crystals}\n\n` +
               `⚔️ Характеристики\n` +
               `⚡ ${stats.power} | ❤️ ${stats.hp}\n` +
-              `🗡️ ${stats.attack} | 🛡️ ${stats.defense}${elementsText}\n\n` +
-              `🏆 Статистика:::\n` +
+              `🗡️ ${stats.attack} | 🛡️ ${stats.defense}\n` +
+              `🏃 ${stats.speed} (${speedDescription})${elementsText}\n\n` +
+              `🏆 Статистика:\n` +
               `🎯 MMR: ${playerMMR}\n` +
               `${player.wins}W / ${player.losses}L (${winRate}%)\n` +
               `🌟 Пробуждение: ${player.awakening_level}\n`,
@@ -4745,6 +5027,65 @@ bot.on('callback_query', async (query) => {
               ...getUpgradeMenu()
             }
           );
+        });
+      });
+      break;
+      
+    case 'adventure_menu':
+      getOrCreatePlayer(userId, query.from.username, (err, player) => {
+        if (err) return bot.sendMessage(userId, '❌ Ошибка');
+        
+        const forestLevel = player.forest_level || 1;
+        const monsters = require('./monsters');
+        
+        // Получаем доступные локации (до текущего уровня леса)
+        const availableLocations = [];
+        for (let level = 1; level <= forestLevel; level += 10) {
+          const location = monsters.getLocationByLevel(level);
+          if (!availableLocations.find(loc => loc.id === location.id)) {
+            availableLocations.push(location);
+          }
+        }
+        
+        let message = `🗺️ **ПРОХОЖДЕНИЕ**\n\n`;
+        message += `🌲 Ваш уровень леса: **${forestLevel}**\n`;
+        message += `📍 Доступно локаций: **${availableLocations.length}**\n\n`;
+        message += `Выберите локацию для исследования:\n`;
+        message += `💡 *Можно возвращаться к пройденным локациям*`;
+        
+        const keyboard = [];
+        
+        // Кнопка быстрого доступа к текущему уровню
+        keyboard.push([
+          { text: `⚡ Текущий уровень (${forestLevel})`, callback_data: `adventure_level_${forestLevel}` }
+        ]);
+        
+        // Кнопки локаций по 2 в ряд
+        for (let i = 0; i < availableLocations.length; i += 2) {
+          const row = [];
+          const loc1 = availableLocations[i];
+          const loc2 = availableLocations[i + 1];
+          
+          row.push({ 
+            text: `${loc1.name} (${loc1.levels[0]}-${loc1.levels[1]})`, 
+            callback_data: `adventure_location_${loc1.id}` 
+          });
+          
+          if (loc2) {
+            row.push({ 
+              text: `${loc2.name} (${loc2.levels[0]}-${loc2.levels[1]})`, 
+              callback_data: `adventure_location_${loc2.id}` 
+            });
+          }
+          
+          keyboard.push(row);
+        }
+        
+        keyboard.push([{ text: '🔙 Назад', callback_data: 'battle_menu' }]);
+        
+        safeEditMessageText(chatId, messageId, message, {
+          reply_markup: { inline_keyboard: keyboard },
+          parse_mode: 'Markdown'
         });
       });
       break;
@@ -4791,7 +5132,7 @@ bot.on('callback_query', async (query) => {
           const bossCheck = monsters.checkBossAvailable(forestLevel);
           
           if (bossCheck.available) {
-            enemy = monsters.createBossInstance(bossCheck.boss, bossCheck.level);
+            enemy = monsters.createBossInstance(bossCheck.boss, bossCheck.level, forestLevel);
           } else {
             const monsterTemplate = monsters.getRandomMonster(forestLevel);
             enemy = monsters.createMonsterInstance(monsterTemplate, forestLevel);
@@ -6121,7 +6462,7 @@ bot.on('callback_query', async (query) => {
             return bot.sendMessage(userId, '❌ Ошибка получения предмета');
           }
           
-          items.addItemToInventory(userId, item.id, (err) => {
+          items.addItemToInventory(userId, item.id, (err, result) => {
             if (err) {
               console.error('Ошибка добавления в инвентарь:', err);
               return bot.sendMessage(userId, '❌ Ошибка добавления в инвентарь');
@@ -6151,15 +6492,22 @@ bot.on('callback_query', async (query) => {
                   }
                 });
                 
-                bot.sendMessage(userId,
-                  `🎁 Предмет найден!\n\n` +
+                let message = `🎁 Предмет найден!\n\n` +
                   `${rarityIcon} ${item.name}\n` +
                   `${rarityName}\n\n` +
                   `⚡ +${item.power_bonus} | ❤️ +${item.hp_bonus}\n` +
                   `🗡️ +${item.attack_bonus} | 🛡️ +${item.defense_bonus}\n\n` +
-                  `✨ +10 XP`,
-                  getMainMenu(true)
-                );
+                  `✨ +10 XP`;
+                
+                // Если предмет был автоматически продан
+                if (result.autoSold) {
+                  message += `\n\n🤖 *Автопродажа:*\n💰 +${result.soldItem.price} золота`;
+                }
+                
+                bot.sendMessage(userId, message, {
+                  parse_mode: 'Markdown',
+                  ...getMainMenu(true)
+                });
                 
                 checkLevelUp(userId);
               });
@@ -6228,6 +6576,7 @@ bot.on('callback_query', async (query) => {
                   const buttons = [
                     [{ text: '📦 Все предметы', callback_data: 'all_items' }],
                     [{ text: '🧪 Зелья', callback_data: 'potions_inventory' }],
+                    [{ text: '🤖 Автопродажа', callback_data: 'auto_sell_menu' }],
                     [{ text: '🔙 Назад', callback_data: 'main_menu' }]
                   ];
                   
@@ -6241,6 +6590,7 @@ bot.on('callback_query', async (query) => {
                 const buttons = [
                   [{ text: '📦 Все предметы', callback_data: 'all_items' }],
                   [{ text: '🧪 Зелья', callback_data: 'potions_inventory' }],
+                  [{ text: '🤖 Автопродажа', callback_data: 'auto_sell_menu' }],
                   [{ text: '🔙 Назад', callback_data: 'main_menu' }]
                 ];
                 
@@ -6255,6 +6605,7 @@ bot.on('callback_query', async (query) => {
             const buttons = [
               [{ text: '📦 Все предметы', callback_data: 'all_items' }],
               [{ text: '🧪 Зелья', callback_data: 'potions_inventory' }],
+              [{ text: '🤖 Автопродажа', callback_data: 'auto_sell_menu' }],
               [{ text: '🔙 Назад', callback_data: 'main_menu' }]
             ];
             
@@ -6262,6 +6613,56 @@ bot.on('callback_query', async (query) => {
               reply_markup: { inline_keyboard: buttons }
             });
           }
+        });
+      });
+      break;
+      
+    case 'auto_sell_menu':
+      getOrCreatePlayer(userId, query.from.username, (err, player) => {
+        if (err) return bot.sendMessage(userId, '❌ Ошибка');
+        
+        autoSell.getAutoSellStats(userId, (err, stats) => {
+          if (err) return bot.sendMessage(userId, '❌ Ошибка получения статистики');
+          
+          let message = `🤖 *Автопродажа предметов*\n\n`;
+          message += `⚙️ *Настройки по редкости:*\n`;
+          
+          const rarities = [
+            { key: 'common', name: 'Обычные', emoji: '⚪', price: autoSell.SELL_PRICES.COMMON },
+            { key: 'rare', name: 'Редкие', emoji: '🔵', price: autoSell.SELL_PRICES.RARE },
+            { key: 'epic', name: 'Эпические', emoji: '🟣', price: autoSell.SELL_PRICES.EPIC },
+            { key: 'mythic', name: 'Мифические', emoji: '🟠', price: autoSell.SELL_PRICES.MYTHIC },
+            { key: 'legendary', name: 'Легендарные', emoji: '🟡', price: autoSell.SELL_PRICES.LEGENDARY }
+          ];
+          
+          const buttons = [];
+          
+          rarities.forEach(rarity => {
+            const enabled = stats.settings[`${rarity.key}_enabled`];
+            const count = stats.inventory_counts[rarity.key.toUpperCase()] || 0;
+            const status = enabled ? '✅' : '❌';
+            
+            message += `${rarity.emoji} ${rarity.name}: ${status} (${count} шт, ${rarity.price}💰)\n`;
+            
+            buttons.push([{
+              text: `${status} ${rarity.emoji} ${rarity.name}`,
+              callback_data: `toggle_auto_sell_${rarity.key}`
+            }]);
+          });
+          
+          message += `\n💰 *Потенциальное золото:* ${stats.potential_gold}💰\n`;
+          message += `\n💡 Включите автопродажу для нужных редкостей. Предметы будут автоматически продаваться при получении.`;
+          
+          buttons.push([
+            { text: '💰 Продать сейчас', callback_data: 'auto_sell_now' },
+            { text: '📊 Статистика', callback_data: 'auto_sell_stats' }
+          ]);
+          buttons.push([{ text: '🔙 К инвентарю', callback_data: 'inventory' }]);
+          
+          safeEditMessageText(chatId, messageId, message, {
+            parse_mode: 'Markdown',
+            reply_markup: { inline_keyboard: buttons }
+          });
         });
       });
       break;
@@ -6423,24 +6824,13 @@ bot.on('callback_query', async (query) => {
           return bot.sendMessage(userId, '❌ Ошибка');
         }
         
-        console.log(`👤 Игрок получен: race_id=${player.race_id}, last_duel_time=${player.last_duel_time}`);
+        console.log(`👤 Игрок получен: race_id=${player.race_id}`);
         
         if (!player.race_id) {
           return bot.sendMessage(userId, '❌ Сначала получите расу!');
         }
         
-        const cooldown = checkCooldown(player.last_duel_time, config.DUEL_COOLDOWN);
-        
-        if (!cooldown.ready) {
-          return safeEditMessageText(chatId, messageId, 
-            formatCooldownMessage('Дуэли', cooldown), {
-            reply_markup: {
-              inline_keyboard: [
-                [{ text: '🔙 Назад', callback_data: 'duel' }]
-              ]
-            }
-          });
-        }
+        // Кулдаун на дуэли убран - можно дуэлиться без ограничений
         
         console.log(`✅ Проверки пройдены, отправляем сообщение о поиске`);
         
@@ -6842,7 +7232,7 @@ bot.on('callback_query', async (query) => {
             });
           }
           
-          let message = `📊 *ХАРАКТЕРИСТИКИ*\n\n💰 Золото: ${player.gold.toLocaleString()}\n\n`;
+          let message = `📊 *ХАРАКТЕРИСТИКИ*\n\n💰 Золото: ${smartFormat(player.gold)}\n\n`;
           
           const buttons = [];
           
@@ -6895,13 +7285,16 @@ bot.on('callback_query', async (query) => {
           );
         }
         
-        const cost = 100 * (player.level + 1);
+        // Экспоненциальное масштабирование: базовая цена * (1.2 ^ уровень)
+        const baseCost = 100;
+        const cost = Math.floor(baseCost * Math.pow(1.2, player.level));
         
         logWithPlayer(`[UPGRADE_RACE] Пытается прокачать расу. Уровень: ${player.level}, Стоимость: ${cost}, Золото: ${player.gold}`, userId);
         
         // Показываем подтверждение с правильной ценой
         safeEditMessageText(chatId, messageId,
           `⬆️ *Прокачка расы*\n\n` +
+          `📊 Текущий уровень: ${player.level}\n` +
           `💰 Стоимость: ${cost} золота\n` +
           `⚡ Бонус: +20 к силе\n\n` +
           `💵 Ваше золото: ${player.gold}\n\n` +
@@ -6933,7 +7326,9 @@ bot.on('callback_query', async (query) => {
           );
         }
         
-        const cost = 100 * (player.level + 1);
+        // Экспоненциальное масштабирование: базовая цена * (1.2 ^ уровень)
+        const baseCost = 100;
+        const cost = Math.floor(baseCost * Math.pow(1.2, player.level));
         
         logWithPlayer(`[CONFIRM_UPGRADE_RACE] Подтверждает прокачку. Золото: ${player.gold}, Стоимость: ${cost}`, userId);
         
@@ -6967,10 +7362,10 @@ bot.on('callback_query', async (query) => {
               safeEditMessageText(chatId, messageId,
                 `✅ *Раса прокачана!*\n\n` +
                 `⭐ Уровень: ${player.level} → ${newLevel}\n` +
-                `⚡ Новая сила: ${newStats.power}\n` +
-                `❤️ HP: ${newStats.hp}\n` +
-                `🗡️ Атака: ${newStats.attack}\n` +
-                `🛡️ Защита: ${newStats.defense}\n\n` +
+                `⚡ Новая сила: ${smartFormat(newStats.power)}\n` +
+                `❤️ HP: ${smartFormat(newStats.hp)}\n` +
+                `🗡️ Атака: ${smartFormat(newStats.attack)}\n` +
+                `🛡️ Защита: ${smartFormat(newStats.defense)}\n\n` +
                 `💰 Потрачено: ${cost} золота`,
                 {
                   parse_mode: 'Markdown',
@@ -7024,23 +7419,46 @@ bot.on('callback_query', async (query) => {
           return bot.sendMessage(userId, '❌ Максимальный уровень!', getMainMenu(true));
         }
         
-        // Показываем подтверждение с правильной ценой
-        safeEditMessageText(chatId, messageId,
-          `🌟 *Пробуждение расы*\n\n` +
-          `� Стоимость: ${config.AWAKENING_GOLD_COST} золота\n` +
-          `⚡ Бонус: +50 к силе\n\n` +
-          `💵 Ваше золото: ${player.gold}\n\n` +
-          `Пробудить расу?`,
-          {
-            parse_mode: 'Markdown',
-            reply_markup: {
-              inline_keyboard: [
-                [{ text: `✅ Пробудить за ${config.AWAKENING_GOLD_COST}💰`, callback_data: 'confirm_awaken' }],
-                [{ text: '❌ Отмена', callback_data: 'upgrade_menu' }]
-              ]
-            }
+        const nextLevel = player.awakening_level + 1;
+        const crystalCost = config.AWAKENING_CRYSTAL_COST[player.awakening_level];
+        const forestLevelRequired = config.AWAKENING_FOREST_LEVEL_REQUIRED[player.awakening_level];
+        const bossesRequired = config.AWAKENING_BOSSES_REQUIRED[player.awakening_level];
+        
+        // Проверяем количество убитых боссов
+        db.get(`SELECT COUNT(*) as boss_count FROM killed_bosses WHERE user_id = ?`, [userId], (err, result) => {
+          const killedBosses = result ? result.boss_count : 0;
+          
+          let message = `🌟 *Пробуждение расы* (Уровень ${nextLevel})\n\n`;
+          message += `💎 Стоимость: ${crystalCost} кристаллов\n`;
+          message += `🌲 Требуемый уровень леса: ${forestLevelRequired}\n`;
+          message += `👑 Требуемо убитых боссов: ${bossesRequired}\n\n`;
+          message += `📊 *Ваш прогресс:*\n`;
+          message += `💎 Кристаллы: ${smartFormat(player.crystals)}/${smartFormat(crystalCost)} ${player.crystals >= crystalCost ? '✅' : '❌'}\n`;
+          message += `🌲 Уровень леса: ${player.forest_level || 1}/${forestLevelRequired} ${(player.forest_level || 1) >= forestLevelRequired ? '✅' : '❌'}\n`;
+          message += `👑 Убито боссов: ${killedBosses}/${bossesRequired} ${killedBosses >= bossesRequired ? '✅' : '❌'}\n\n`;
+          message += `⚡ Бонус: +50 к силе + x${(nextLevel * 0.1).toFixed(1)} к наградам\n\n`;
+          
+          const canAwaken = player.crystals >= crystalCost && 
+                           (player.forest_level || 1) >= forestLevelRequired && 
+                           killedBosses >= bossesRequired;
+          
+          if (canAwaken) {
+            message += `✨ Готовы к пробуждению!`;
+          } else {
+            message += `❌ Требования не выполнены`;
           }
-        );
+          
+          const buttons = [];
+          if (canAwaken) {
+            buttons.push([{ text: `✅ Пробудиться за ${crystalCost}💎`, callback_data: 'confirm_awaken' }]);
+          }
+          buttons.push([{ text: '❌ Отмена', callback_data: 'upgrade_menu' }]);
+          
+          safeEditMessageText(chatId, messageId, message, {
+            parse_mode: 'Markdown',
+            reply_markup: { inline_keyboard: buttons }
+          });
+        });
       });
       break;
       
@@ -7054,24 +7472,44 @@ bot.on('callback_query', async (query) => {
           return bot.sendMessage(userId, '❌ Максимальный уровень!', getMainMenu(true));
         }
         
-        if (player.gold < config.AWAKENING_GOLD_COST) {
-          return bot.sendMessage(userId, `❌ Нужно ${config.AWAKENING_GOLD_COST}💰`, getMainMenu(true));
-        }
+        const crystalCost = config.AWAKENING_CRYSTAL_COST[player.awakening_level];
+        const forestLevelRequired = config.AWAKENING_FOREST_LEVEL_REQUIRED[player.awakening_level];
+        const bossesRequired = config.AWAKENING_BOSSES_REQUIRED[player.awakening_level];
         
-        db.run(`UPDATE players SET gold = gold - ?, awakening_level = awakening_level + 1, power = power + 50 WHERE user_id = ?`,
-          [config.AWAKENING_GOLD_COST, userId], () => {
-            const newLevel = player.awakening_level + 1;
-            const newMultiplier = 1 + (newLevel * 0.1);
-            
-            bot.sendMessage(userId, 
-              `✨ *ПРОБУЖДЕНИЕ!* ✨\n\n` +
-              `🌟 Уровень: ${newLevel}\n` +
-              `⚡ +50 силы\n` +
-              `💰 Бонус к золоту и опыту: x${newMultiplier.toFixed(1)}\n\n` +
-              `� -${config.AWAKENING_GOLD_COST} золота`,
-              { parse_mode: 'Markdown', ...getMainMenu(true) }
-            );
-          });
+        // Проверяем количество убитых боссов
+        db.get(`SELECT COUNT(*) as boss_count FROM killed_bosses WHERE user_id = ?`, [userId], (err, result) => {
+          const killedBosses = result ? result.boss_count : 0;
+          
+          // Проверяем все требования
+          if (player.crystals < crystalCost) {
+            return bot.sendMessage(userId, `❌ Нужно ${crystalCost}💎 кристаллов`, getMainMenu(true));
+          }
+          
+          if ((player.forest_level || 1) < forestLevelRequired) {
+            return bot.sendMessage(userId, `❌ Нужен ${forestLevelRequired} уровень леса`, getMainMenu(true));
+          }
+          
+          if (killedBosses < bossesRequired) {
+            return bot.sendMessage(userId, `❌ Нужно убить ${bossesRequired} боссов`, getMainMenu(true));
+          }
+          
+          // Выполняем пробуждение
+          db.run(`UPDATE players SET crystals = crystals - ?, awakening_level = awakening_level + 1, power = power + 50 WHERE user_id = ?`,
+            [crystalCost, userId], () => {
+              const newLevel = player.awakening_level + 1;
+              const newMultiplier = 1 + (newLevel * 0.1);
+              
+              bot.sendMessage(userId, 
+                `✨ *ПРОБУЖДЕНИЕ!* ✨\n\n` +
+                `🌟 Уровень: ${newLevel}\n` +
+                `⚡ +50 силы\n` +
+                `💰 Бонус к золоту и опыту: x${newMultiplier.toFixed(1)}\n\n` +
+                `💎 -${crystalCost} кристаллов\n\n` +
+                `🎉 Поздравляем с пробуждением!`,
+                { parse_mode: 'Markdown', ...getMainMenu(true) }
+              );
+            });
+        });
       });
       break;
       
@@ -7115,10 +7553,13 @@ bot.on('callback_query', async (query) => {
         let goldEarned = Math.floor(Math.random() * 100) + 50; // 50-150 золота
         let expEarned = 20;
         
-        // Применяем бонусы пробуждения - УДАЛЕНО
-        // const awakeningBonus = applyAwakeningBonus(goldEarned, expEarned, player.awakening_level);
-        // goldEarned = awakeningBonus.gold;
-        // expEarned = awakeningBonus.exp;
+        // Применяем бонусы пробуждения
+        const awakeningLevel = player.awakening_level || 0;
+        if (awakeningLevel > 0) {
+          const awakeningBonus = applyAwakeningBonus(goldEarned, expEarned, awakeningLevel);
+          goldEarned = awakeningBonus.gold;
+          expEarned = awakeningBonus.exp;
+        }
         
         const now = Math.floor(Date.now() / 1000);
         
@@ -7128,10 +7569,10 @@ bot.on('callback_query', async (query) => {
               `💰 Заработано: ${goldEarned} золота\n` +
               `✨ Получено: ${expEarned} опыта\n`;
             
-            // Показываем множитель если есть пробуждение - УДАЛЕНО
-            // if (player.awakening_level > 0) {
-            //   workMessage += `🌟 Бонус пробуждения: x${awakeningBonus.multiplier.toFixed(1)}\n`;
-            // }
+            // Показываем множитель если есть пробуждение
+            if (player.awakening_level > 0) {
+              workMessage += `🌟 Бонус пробуждения: x${awakeningBonus.multiplier.toFixed(1)}\n`;
+            }
             
             workMessage += `\n⏰ Следующая работа через: ${formatCooldown(config.WORK_COOLDOWN)}`;
             
@@ -7215,10 +7656,13 @@ bot.on('callback_query', async (query) => {
         let goldReward = 200;
         let expReward = 100;
         
-        // Применяем бонусы пробуждения - УДАЛЕНО
-        // const awakeningBonus = applyAwakeningBonus(goldReward, expReward, player.awakening_level);
-        // goldReward = awakeningBonus.gold;
-        // expReward = awakeningBonus.exp;
+        // Применяем бонусы пробуждения
+        const awakeningLevel = player.awakening_level || 0;
+        if (awakeningLevel > 0) {
+          const awakeningBonus = applyAwakeningBonus(goldReward, expReward, awakeningLevel);
+          goldReward = awakeningBonus.gold;
+          expReward = awakeningBonus.exp;
+        }
         
         const now = Math.floor(Date.now() / 1000);
         
@@ -7228,10 +7672,10 @@ bot.on('callback_query', async (query) => {
               `💰 +${goldReward} золота\n` +
               `✨ +${expReward} опыта\n`;
             
-            // Показываем множитель если есть пробуждение - УДАЛЕНО
-            // if (player.awakening_level > 0) {
-            //   rewardMessage += `🌟 Бонус пробуждения: x${awakeningBonus.multiplier.toFixed(1)}\n`;
-            // }
+            // Показываем множитель если есть пробуждение
+            if (player.awakening_level > 0) {
+              rewardMessage += `🌟 Бонус пробуждения: x${awakeningBonus.multiplier.toFixed(1)}\n`;
+            }
             
             rewardMessage += `\n⏰ Следующая награда через: 24 часа`;
             
@@ -7270,6 +7714,334 @@ bot.on('callback_query', async (query) => {
       
     // Обработчики редактирования рас
     default:
+      // Обработчики приключений
+      if (data.startsWith('adventure_location_')) {
+        const locationId = parseInt(data.split('_')[2]);
+        getOrCreatePlayer(userId, query.from.username, (err, player) => {
+          if (err) return bot.sendMessage(userId, '❌ Ошибка');
+          
+          const monsters = require('./monsters');
+          const location = monsters.LOCATIONS[locationId];
+          
+          if (!location) {
+            return safeEditMessageText(chatId, messageId, '❌ Локация не найдена', {
+              reply_markup: { inline_keyboard: [[{ text: '🔙 Назад', callback_data: 'adventure_menu' }]] }
+            });
+          }
+          
+          const forestLevel = player.forest_level || 1;
+          const maxAvailableLevel = Math.min(location.levels[1], forestLevel);
+          
+          let message = `📍 **${location.name.toUpperCase()}**\n\n`;
+          message += `🌲 Уровни: ${location.levels[0]}-${location.levels[1]}\n`;
+          message += `⚡ Доступно до уровня: **${maxAvailableLevel}**\n\n`;
+          message += `Выберите уровень для битвы:\n`;
+          message += `👑 - Босс доступен | ⏰ - Босс на кулдауне (10 мин)`;
+          
+          const keyboard = [];
+          
+          // Функция для создания кнопок уровней
+          const createLevelButtons = async () => {
+            // Генерируем кнопки уровней по 5 в ряд
+            for (let level = location.levels[0]; level <= maxAvailableLevel; level += 5) {
+              const row = [];
+              for (let i = 0; i < 5 && (level + i) <= maxAvailableLevel; i++) {
+                const currentLevel = level + i;
+                
+                // Проверяем есть ли босс на этом уровне
+                const bossCheck = monsters.checkBossAvailable(currentLevel);
+                
+                if (bossCheck.available) {
+                  // Проверяем кулдаун босса
+                  const cooldown = await getBossCooldown(userId, currentLevel);
+                  let levelText;
+                  
+                  if (cooldown.ready) {
+                    levelText = `👑${currentLevel}`;
+                  } else {
+                    levelText = `⏰${currentLevel}`;
+                  }
+                  
+                  row.push({ 
+                    text: levelText, 
+                    callback_data: `adventure_level_${currentLevel}` 
+                  });
+                } else {
+                  // Обычный моб
+                  row.push({ 
+                    text: `${currentLevel}`, 
+                    callback_data: `adventure_level_${currentLevel}` 
+                  });
+                }
+              }
+              keyboard.push(row);
+            }
+            
+            keyboard.push([
+              { text: '🔙 К локациям', callback_data: 'adventure_menu' },
+              { text: '🏠 Главное меню', callback_data: 'main_menu' }
+            ]);
+            
+            safeEditMessageText(chatId, messageId, message, {
+              reply_markup: { inline_keyboard: keyboard },
+              parse_mode: 'Markdown'
+            });
+          };
+          
+          createLevelButtons();
+        });
+        return;
+      }
+      
+      if (data.startsWith('adventure_level_')) {
+        const selectedLevel = parseInt(data.split('_')[2]);
+        getOrCreatePlayer(userId, query.from.username, (err, player) => {
+          if (err) return bot.sendMessage(userId, '❌ Ошибка');
+          
+          const forestLevel = player.forest_level || 1;
+          
+          // Проверяем доступность уровня
+          if (selectedLevel > forestLevel) {
+            return safeEditMessageText(chatId, messageId, 
+              `❌ Уровень ${selectedLevel} недоступен!\n\n🌲 Ваш максимальный уровень: ${forestLevel}`, {
+              reply_markup: { inline_keyboard: [[{ text: '🔙 Назад', callback_data: 'adventure_menu' }]] }
+            });
+          }
+          
+          const monsters = require('./monsters');
+          const bossCheck = monsters.checkBossAvailable(selectedLevel);
+          
+          // Проверяем кулдаун (разный для боссов и мобов)
+          if (bossCheck.available) {
+            // Для босса - проверяем кулдаун босса (10 минут)
+            getBossCooldown(userId, selectedLevel).then(cooldown => {
+              if (!cooldown.ready) {
+                return safeEditMessageText(chatId, messageId, 
+                  formatCooldownMessage(`Босс уровня ${selectedLevel}`, cooldown), {
+                  reply_markup: {
+                    inline_keyboard: [
+                      [{ text: '🔙 К локациям', callback_data: 'adventure_menu' }]
+                    ]
+                  }
+                });
+              }
+              
+              // Устанавливаем кулдаун босса
+              setBossCooldown(userId, selectedLevel);
+              
+              // Создаем босса
+              let enemy;
+              let isBossRerun = false;
+              
+              // Проверяем убивал ли игрок этого босса
+              db.get(`SELECT * FROM killed_bosses WHERE user_id = ? AND boss_level = ?`, 
+                [userId, selectedLevel], (err, killedBoss) => {
+                
+                if (killedBoss) {
+                  // Босс уже убит - создаем версию без кристаллов
+                  enemy = monsters.createBossInstance(bossCheck.boss, selectedLevel, forestLevel);
+                  enemy.crystalReward = 0; // Убираем кристаллы
+                  enemy.name += ' (Повтор)';
+                  isBossRerun = true;
+                } else {
+                  // Первое убийство босса
+                  enemy = monsters.createBossInstance(bossCheck.boss, selectedLevel, forestLevel);
+                }
+                
+                startAdventureBattle(userId, player, enemy, selectedLevel, isBossRerun);
+              });
+            });
+          } else {
+            // Для обычного моба - проверяем обычный кулдаун (10 секунд)
+            getCooldown(userId, 'forest').then(cooldown => {
+              if (!cooldown.ready) {
+                return safeEditMessageText(chatId, messageId, 
+                  formatCooldownMessage('Прохождение', cooldown), {
+                  reply_markup: {
+                    inline_keyboard: [
+                      [{ text: '🔙 К локациям', callback_data: 'adventure_menu' }]
+                    ]
+                  }
+                });
+              }
+              
+              // Устанавливаем обычный кулдаун
+              setCooldown(userId, 'forest', 10); // 10 секунд
+              
+              // Обычный монстр
+              const monsterTemplate = monsters.getRandomMonster(selectedLevel);
+              const enemy = monsters.createMonsterInstance(monsterTemplate, selectedLevel);
+              startAdventureBattle(userId, player, enemy, selectedLevel, false);
+            });
+          }
+        });
+        return;
+      }
+      
+      // Обработка кнопки "Следующий уровень"
+      if (data.startsWith('next_level_auto_')) {
+        const currentBattleLevel = parseInt(data.split('_')[3]);
+        const nextLevel = currentBattleLevel + 1;
+        
+        getOrCreatePlayer(userId, query.from.username, (err, player) => {
+          if (err) return bot.sendMessage(userId, '❌ Ошибка');
+          
+          if (!player.race_id) {
+            return bot.sendMessage(userId, '❌ Сначала получите расу!', getMainMenu(false));
+          }
+          
+          const maxForestLevel = player.forest_level || 1;
+          
+          // Если следующий уровень превышает максимальный - обновляем максимальный уровень
+          if (nextLevel > maxForestLevel) {
+            db.run('UPDATE players SET forest_level = ? WHERE user_id = ?', [nextLevel, userId], (err) => {
+              if (err) {
+                console.error('Ошибка обновления уровня леса:', err);
+                return bot.sendMessage(userId, '❌ Ошибка обновления уровня');
+              }
+              
+              proceedToNextLevel();
+            });
+          } else {
+            proceedToNextLevel();
+          }
+          
+          function proceedToNextLevel() {
+            // Автоматически запускаем бой на следующем уровне
+            const monsters = require('./monsters');
+            const monster = monsters.getRandomMonster(nextLevel);
+            const monsterInstance = monsters.createMonsterInstance(monster, nextLevel);
+            
+            // Сохраняем врага в базе данных
+            db.run('UPDATE players SET current_forest_enemy = ? WHERE user_id = ?', 
+              [JSON.stringify(monsterInstance)], (err) => {
+              if (err) {
+                console.error('Ошибка сохранения врага:', err);
+                return bot.sendMessage(userId, '❌ Ошибка');
+              }
+              
+              const location = monsters.getLocationByLevel(nextLevel);
+              let message = `🗺️ **${location.name}** (Уровень ${nextLevel})\n\n`;
+              message += `${monsterInstance.emoji} **${monsterInstance.name}**\n`;
+              message += `❤️ HP: ${smartFormat(monsterInstance.hp)}\n`;
+              message += `⚔️ Атака: ${smartFormat(monsterInstance.attack)}\n`;
+              message += `🛡️ Защита: ${smartFormat(monsterInstance.defense)}\n\n`;
+              message += `💰 Награда: ${monsterInstance.goldReward} золота\n`;
+              message += `⭐ Опыт: ${monsterInstance.expReward}\n\n`;
+              message += `Готовы к бою?`;
+              
+              safeEditMessageText(chatId, messageId, message, {
+                reply_markup: {
+                  inline_keyboard: [
+                    [{ text: '⚔️ Атаковать', callback_data: `adventure_level_${nextLevel}` }],
+                    [{ text: '🔙 К локациям', callback_data: 'adventure_menu' }]
+                  ]
+                },
+                parse_mode: 'Markdown'
+              });
+            });
+          }
+        });
+        return;
+      }
+      
+      // Обработчики автопродажи
+      if (data.startsWith('toggle_auto_sell_')) {
+        const rarity = data.replace('toggle_auto_sell_', '');
+        
+        autoSell.getAutoSellSettings(userId, (err, settings) => {
+          if (err) return bot.answerCallbackQuery(query.id, { text: '❌ Ошибка' });
+          
+          const currentEnabled = settings[`${rarity}_enabled`];
+          const newEnabled = !currentEnabled;
+          
+          autoSell.updateAutoSellSettings(userId, rarity, newEnabled, (err) => {
+            if (err) return bot.answerCallbackQuery(query.id, { text: '❌ Ошибка' });
+            
+            const status = newEnabled ? 'включена' : 'отключена';
+            bot.answerCallbackQuery(query.id, { text: `Автопродажа ${rarity} ${status}` });
+            
+            // Обновляем меню
+            bot.emit('callback_query', { ...query, data: 'auto_sell_menu' });
+          });
+        });
+        return;
+      }
+      
+      if (data === 'auto_sell_now') {
+        autoSell.autoSellInventory(userId, (err, result) => {
+          if (err) return bot.answerCallbackQuery(query.id, { text: '❌ Ошибка продажи' });
+          
+          if (result.sold_items.length === 0) {
+            return bot.answerCallbackQuery(query.id, { text: 'Нет предметов для продажи' });
+          }
+          
+          let message = `💰 *Автопродажа завершена!*\n\n`;
+          message += `📦 Продано предметов: ${result.sold_items.length}\n`;
+          message += `💰 Получено золота: ${result.total_gold}\n\n`;
+          
+          const rarityCount = {};
+          result.sold_items.forEach(item => {
+            rarityCount[item.rarity] = (rarityCount[item.rarity] || 0) + 1;
+          });
+          
+          Object.keys(rarityCount).forEach(rarity => {
+            const emoji = {
+              'COMMON': '⚪',
+              'RARE': '🔵', 
+              'EPIC': '🟣',
+              'MYTHIC': '🟠',
+              'LEGENDARY': '🟡'
+            }[rarity] || '⚫';
+            message += `${emoji} ${rarity}: ${rarityCount[rarity]} шт\n`;
+          });
+          
+          bot.sendMessage(userId, message, { parse_mode: 'Markdown' });
+          bot.answerCallbackQuery(query.id, { text: `Продано ${result.sold_items.length} предметов за ${result.total_gold}💰` });
+          
+          // Обновляем меню
+          setTimeout(() => {
+            bot.emit('callback_query', { ...query, data: 'auto_sell_menu' });
+          }, 1000);
+        });
+        return;
+      }
+      
+      if (data === 'auto_sell_stats') {
+        autoSell.getAutoSellStats(userId, (err, stats) => {
+          if (err) return bot.answerCallbackQuery(query.id, { text: '❌ Ошибка' });
+          
+          let message = `📊 *Статистика автопродажи*\n\n`;
+          message += `💰 *Цены продажи:*\n`;
+          
+          Object.keys(autoSell.SELL_PRICES).forEach(rarity => {
+            const emoji = {
+              'COMMON': '⚪',
+              'RARE': '🔵',
+              'EPIC': '🟣', 
+              'MYTHIC': '🟠',
+              'LEGENDARY': '🟡'
+            }[rarity] || '⚫';
+            
+            const count = stats.inventory_counts[rarity] || 0;
+            const enabled = stats.settings[`${rarity.toLowerCase()}_enabled`];
+            const status = enabled ? '✅' : '❌';
+            
+            message += `${emoji} ${rarity}: ${autoSell.SELL_PRICES[rarity]}💰 ${status} (${count} шт)\n`;
+          });
+          
+          message += `\n💰 Потенциальное золото: ${stats.potential_gold}💰`;
+          
+          safeEditMessageText(chatId, messageId, message, {
+            parse_mode: 'Markdown',
+            reply_markup: {
+              inline_keyboard: [[{ text: '🔙 Назад', callback_data: 'auto_sell_menu' }]]
+            }
+          });
+        });
+        return;
+      }
+      
       // Обработчики улучшения характеристик
       if (data.startsWith('upgrade_char_')) {
         const charType = data.replace('upgrade_char_', '');
@@ -7722,7 +8494,7 @@ bot.on('callback_query', async (query) => {
                 `⭐ Уровень: ${raid.boss_level}\n` +
                 `📝 ${raid.boss_description}\n${requirementsText}\n` +
                 `${hpBar}\n` +
-                `❤️ HP: ${raid.current_hp.toLocaleString()}/${raid.boss_hp.toLocaleString()} (${hpPercent}%)\n` +
+                `❤️ HP: ${smartFormat(raid.current_hp)}/${smartFormat(raid.boss_hp)} (${hpPercent}%)\n` +
                 `⏰ Осталось: ${timeLeft} мин\n\n` +
                 `💰 Награды (делятся по урону):\n` +
                 `• ${raid.rewards.total_gold} золота\n` +
@@ -7806,7 +8578,7 @@ bot.on('callback_query', async (query) => {
                 `⭐ Уровень: ${raid.boss_level}\n` +
                 `📝 ${raid.boss_description}\n${requirementsText}\n` +
                 `${hpBar}\n` +
-                `❤️ HP: ${raid.current_hp.toLocaleString()}/${raid.boss_hp.toLocaleString()} (${hpPercent}%)\n` +
+                `❤️ HP: ${smartFormat(raid.current_hp)}/${smartFormat(raid.boss_hp)} (${hpPercent}%)\n` +
                 `⏰ Осталось: ${timeLeft} мин\n\n` +
                 `${statusText}`,
                 {
@@ -9605,3 +10377,6 @@ bot.onText(/\/testreferral/, async (msg) => {
     });
   });
 });
+
+// Экспортируем бота для использования в других модулях
+module.exports = { bot };

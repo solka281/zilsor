@@ -109,9 +109,30 @@ function getRandomItem(callback) {
 
 // Добавить предмет в инвентарь
 function addItemToInventory(playerId, itemId, callback) {
-  // Просто добавляем предмет в инвентарь без slot (slot хранится в таблице items)
+  // Добавляем предмет в инвентарь
   db.run(`INSERT INTO inventory (player_id, item_id) VALUES (?, ?)`,
-    [playerId, itemId], callback);
+    [playerId, itemId], (err) => {
+      if (err) return callback(err);
+      
+      // Получаем ID добавленного предмета в инвентаре
+      const inventoryId = this.lastID;
+      
+      // Проверяем автопродажу
+      const autoSell = require('./auto_sell');
+      autoSell.checkAutoSell(playerId, inventoryId, (err, result) => {
+        if (err) {
+          console.error('Ошибка проверки автопродажи:', err);
+          return callback(null, { inventoryId, autoSold: false });
+        }
+        
+        if (result.sold) {
+          console.log(`🤖 Автопродажа: ${result.item_name} (${result.rarity}) за ${result.price}💰`);
+          return callback(null, { inventoryId, autoSold: true, soldItem: result });
+        }
+        
+        callback(null, { inventoryId, autoSold: false });
+      });
+    });
 }
 
 // Экипировать предмет

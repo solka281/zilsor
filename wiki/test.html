@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Wiki Test</title>
+</head>
+<body>
+    <h1>Тест загрузки данных Wiki</h1>
+    <div id="results"></div>
+
+    <script src="race_data.js"></script>
+    <script src="item_data.js"></script>
+    <script src="locations_data.js"></script>
+    
+    <script>
+        const results = document.getElementById('results');
+        let html = '<h2>Результаты:</h2>';
+        
+        // Проверка RACE_DATA
+        if (typeof RACE_DATA !== 'undefined') {
+            const raceCount = Object.keys(RACE_DATA).length;
+            html += `<p>✅ RACE_DATA загружен: ${raceCount} рас</p>`;
+            html += '<h3>Первые 3 расы:</h3><ul>';
+            Object.values(RACE_DATA).slice(0, 3).forEach(race => {
+                html += `<li>${race.name} - ${race.rarity} - ${race.cost}💎</li>`;
+            });
+            html += '</ul>';
+        } else {
+            html += '<p>❌ RACE_DATA не загружен</p>';
+        }
+        
+        // Проверка ITEM_DATA
+        if (typeof ITEM_DATA !== 'undefined') {
+            const itemCount = Object.keys(ITEM_DATA).length;
+            html += `<p>✅ ITEM_DATA загружен: ${itemCount} предметов</p>`;
+            html += '<h3>Первые 3 предмета:</h3><ul>';
+            Object.values(ITEM_DATA).slice(0, 3).forEach(item => {
+                html += `<li>${item.name} - ${item.type} - ${item.rarity}</li>`;
+            });
+            html += '</ul>';
+        } else {
+            html += '<p>❌ ITEM_DATA не загружен</p>';
+        }
+        
+        // Проверка LOCATIONS_DATA
+        if (typeof LOCATIONS_DATA !== 'undefined') {
+            const locCount = Object.keys(LOCATIONS_DATA).length;
+            html += `<p>✅ LOCATIONS_DATA загружен: ${locCount} локаций</p>`;
+        } else {
+            html += '<p>❌ LOCATIONS_DATA не загружен</p>';
+        }
+        
+        results.innerHTML = html;
+    </script>
+</body>
+</html>
