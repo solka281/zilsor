@@ -519,11 +519,12 @@ router.post('/buy', (req, res) => {
               return res.json({ success: false, message: 'Ошибка начисления средств' });
             }
             
-            // Переносим предмет от продавца к покупателю
-            db.run(`UPDATE inventory SET player_id = ?, equipped = 0 WHERE id = ?`,
-              [userId, marketItem.inventory_id], (err) => {
+            // Добавляем предмет в инвентарь покупателя (создаём новую запись)
+            db.run(`INSERT INTO inventory (player_id, item_id, equipped) VALUES (?, ?, 0)`,
+              [userId, marketItem.item_id], (err) => {
                 if (err) {
                   db.run('ROLLBACK');
+                  console.error('Ошибка добавления предмета в инвентарь:', err);
                   return res.json({ success: false, message: 'Ошибка передачи предмета' });
                 }
                 
@@ -703,16 +704,52 @@ router.post('/remove-sale', (req, res) => {
     return res.json({ success: false, message: 'Недостаточно данных' });
   }
   
-  let table, itemField;
+  // Снятие аукциона (только если нет ставок)
+  if (type === 'auction') {
+    db.get(`SELECT * FROM auctions WHERE id = ? AND seller_id = ? AND status = 'active'`, [saleId, userId], (err, auction) => {
+      if (err || !auction) {
+        return res.json({ success: false, message: 'Аукцион не найден' });
+      }
+      
+      if (auction.bid_count > 0) {
+        return res.json({ success: false, message: 'Нельзя снять аукцион — уже есть ставки' });
+      }
+      
+      db.serialize(() => {
+        db.run('BEGIN TRANSACTION');
+        
+        // Возвращаем предмет в инвентарь
+        db.run(`INSERT INTO inventory (player_id, item_id, equipped) VALUES (?, ?, 0)`,
+          [userId, auction.item_id], (err) => {
+            if (err) {
+              db.run('ROLLBACK');
+              return res.json({ success: false, message: 'Ошибка возврата предмета' });
+            }
+            
+            // Отменяем аукцион
+            db.run(`UPDATE auctions SET status = 'cancelled' WHERE id = ?`, [saleId], (err) => {
+              if (err) {
+                db.run('ROLLBACK');
+                return res.json({ success: false, message: 'Ошибка отмены аукциона' });
+              }
+              
+              db.run('COMMIT');
+              res.json({ success: true, message: 'Аукцион снят, предмет возвращён в инвентарь' });
+            });
+          });
+      });
+    });
+    return;
+  }
+  
+  let table;
   
   switch(type) {
     case 'item':
       table = 'marketplace_items';
-      itemField = 'item_id';
       break;
     case 'currency':
       table = 'marketplace_currencies';
-      itemField = null;
       break;
     default:
       return res.json({ success: false, message: 'Неверный тип продажи' });
@@ -736,7 +773,6 @@ router.post('/remove-sale', (req, res) => {
               return res.json({ success: false, message: 'Ошибка возврата предмета' });
             }
             
-            // Удаляем с маркетплейса
             db.run(`DELETE FROM ${table} WHERE id = ?`, [saleId], (err) => {
               if (err) {
                 db.run('ROLLBACK');
@@ -744,7 +780,7 @@ router.post('/remove-sale', (req, res) => {
               }
               
               db.run('COMMIT');
-              res.json({ success: true, message: 'Предмет снят с продажи' });
+              res.json({ success: true, message: 'Предмет снят с продажи и возвращён в инвентарь' });
             });
           });
       } else if (type === 'currency') {
@@ -759,7 +795,6 @@ router.post('/remove-sale', (req, res) => {
             return res.json({ success: false, message: 'Ошибка возврата валюты' });
           }
           
-          // Удаляем с маркетплейса
           db.run(`DELETE FROM ${table} WHERE id = ?`, [saleId], (err) => {
             if (err) {
               db.run('ROLLBACK');
@@ -767,7 +802,7 @@ router.post('/remove-sale', (req, res) => {
             }
             
             db.run('COMMIT');
-            res.json({ success: true, message: 'Валюта снята с продажи' });
+            res.json({ success: true, message: 'Валюта снята с продажи и возвращена' });
           });
         });
       }
@@ -931,9 +966,9 @@ function completeExpiredAuctions() {
         // Начинаем транзакцию
         db.run('BEGIN TRANSACTION');
         
-        // Передаем предмет победителю
-        db.run(`UPDATE inventory SET player_id = ? WHERE id = ?`,
-          [auction.current_bidder_id, auction.inventory_id], (err) => {
+        // Передаем предмет победителю (создаём новую запись в инвентаре)
+        db.run(`INSERT INTO inventory (player_id, item_id, equipped) VALUES (?, ?, 0)`,
+          [auction.current_bidder_id, auction.item_id], (err) => {
             if (err) {
               console.error('Ошибка передачи предмета:', err);
               db.run('ROLLBACK');

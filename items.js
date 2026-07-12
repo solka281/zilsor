@@ -27,6 +27,7 @@ const BASE_ITEMS = [
   { name: 'Кольчуга', description: 'Прочная броня', rarity: 'RARE', slot: 'chest', power_bonus: 20, hp_bonus: 50, attack_bonus: 0, defense_bonus: 15, special_effect: null },
   { name: 'Драконья чешуя', description: 'Броня из чешуи дракона', rarity: 'EPIC', slot: 'chest', power_bonus: 50, hp_bonus: 100, attack_bonus: 0, defense_bonus: 40, special_effect: 'fire_resist_30' },
   { name: 'Броня теней', description: 'Мистическая защита', rarity: 'MYTHIC', slot: 'chest', power_bonus: 90, hp_bonus: 180, attack_bonus: 0, defense_bonus: 70, special_effect: 'stealth_10' },
+  { name: 'Латные доспехи', description: 'Легендарные доспехи Абаддона', rarity: 'LEGENDARY', slot: 'chest', power_bonus: 180, hp_bonus: 350, attack_bonus: 0, defense_bonus: 120, special_effect: 'abaddon_blessing' },
   { name: 'Доспехи Бога', description: 'Божественная защита', rarity: 'LEGENDARY', slot: 'chest', power_bonus: 150, hp_bonus: 300, attack_bonus: 0, defense_bonus: 100, special_effect: 'damage_reflect_30' },
   
   // ПОНОЖИ

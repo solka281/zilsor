@@ -17,13 +17,13 @@ function formatNumber(num, decimals = 2) {
   const absNum = Math.abs(num);
   const sign = num < 0 ? '-' : '';
 
-  // Определяем суффиксы для разных порядков (начиная с 100K)
+  // Определяем суффиксы для разных порядков
   const suffixes = [
     { value: 1e15, suffix: 'Q' },  // Quadrillion (квадриллион)
     { value: 1e12, suffix: 'T' },  // Trillion (триллион)
     { value: 1e9, suffix: 'B' },   // Billion (миллиард)
     { value: 1e6, suffix: 'M' },   // Million (миллион)
-    { value: 1e5, suffix: 'K' }    // Thousand (тысяча) - начиная с 100K
+    { value: 1e3, suffix: 'K' }    // Thousand (тысяча) - используем 1000 как делитель
   ];
 
   // Находим подходящий суффикс
@@ -36,8 +36,8 @@ function formatNumber(num, decimals = 2) {
     }
   }
 
-  // Если число меньше 100K, возвращаем с разделителями
-  return formatWithCommas(num);
+  // Если число меньше 1000, возвращаем как есть
+  return sign + Math.floor(absNum).toString();
 }
 
 /**

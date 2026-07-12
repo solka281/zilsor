@@ -80,13 +80,66 @@ app.use('/wiki', express.static('wiki'));
 // Запуск сервера
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🌐 Сервер маркетплейса запущен на порту ${PORT}`);
-  console.log(`🔗 URL: https://your-railway-domain.railway.app`);
+  console.log(`🔗 URL: ${config.SERVER_URL}`);
+  console.log(`🏪 Маркетплейс: ${config.SERVER_URL}/marketplace`);
+  console.log(`📚 Wiki: ${config.SERVER_URL}/wiki`);
 });
 
 // Инициализация маркетплейса
 marketplaceAPI.initializeMarketplace();
 
 // Utility functions - MUST be defined before use
+// Функция для получения описания способности расы
+function getAbilityDescription(ability) {
+  if (!ability) return '';
+  
+  const abilityLower = ability.toLowerCase();
+  
+  const descriptions = {
+    // ОБЫЧНЫЕ РАСЫ (COMMON)
+    'адаптация': '+5% к получаемому опыту',
+    'меткость': '25% шанс +10% урона',
+    'стойкость': '30% шанс -15% получаемого урона',
+    'ярость': '+15% урона при HP < 30%',    
+    // РЕДКИЕ РАСЫ (RARE)
+    'теневой удар': '20% шанс критического урона (x1.5)',
+    'гибридная сила': '+10% ко всем характеристикам (постоянно)',
+    'инженерия': '+20% к эффективности предметов',
+    'скоростная атака': '12% шанс двойного удара',
+    'бычий натиск': '+30% урона при полном HP',
+    
+    // ЭПИЧЕСКИЕ РАСЫ (EPIC)
+    'огненное дыхание': '20% шанс +25% урона',
+    'адское пламя': '20% шанс +20% критического урона',
+    'божественная защита': '25% шанс -15% получаемого урона',
+    'стихийная мощь': '25% шанс двойного урона',
+    'нежизнь': '+20% к HP и защите (постоянно), 15% шанс +20% урона, 20% шанс -20% получаемого урона',
+    'звериная ярость': '+30% урона при HP < 30%',
+    
+    // МИСТИЧЕСКИЕ РАСЫ (MYTHIC)
+    'возрождение': 'Воскрешение с 50% HP при смерти (1 раз за бой, 100% шанс)',
+    'кровопийство': '15% шанс +15% урона и восстановление HP',
+    'драконья мощь': '+40% ко всем характеристикам (постоянно), 12% шанс +80% урона',
+    'некромантия': '18% шанс призыва мертвых союзников (+25% урона)',
+    'магия желаний': '20% шанс тройного урона',
+    
+    // ЛЕГЕНДАРНЫЕ РАСЫ (LEGENDARY)
+    'титаническая мощь': '10% шанс удвоить урон',
+    'божественная ярость': '8% шанс неуязвимости на 2 хода',
+    
+    // СЕКРЕТНЫЕ РАСЫ (SECRET)
+    'первородная сила': '15% шанс урон x2.5 и восстановление 20% HP'
+  };
+  
+  for (const [key, desc] of Object.entries(descriptions)) {
+    if (abilityLower.includes(key)) {
+      return desc;
+    }
+  }
+  
+  return '';
+}
+
 // Функция для проверки размера изображения
 function checkImageSize(imagePath) {
   try {
@@ -163,10 +216,15 @@ function sendImageWithText(chatId, imagePath, text, options = {}) {
 
 // Функция для редактирования сообщения с изображением
 function editImageWithText(chatId, messageId, imagePath, text, options = {}) {
-  // Удаляем старое сообщение и отправляем новое
-  bot.deleteMessage(chatId, messageId).catch(error => {
-    console.log('Не удалось удалить сообщение:', error.message);
-  });
+  // Если messageId есть и валиден, пытаемся удалить старое сообщение
+  if (messageId && messageId > 0) {
+    bot.deleteMessage(chatId, messageId).catch(error => {
+      // Игнорируем ошибку если сообщение не найдено
+      if (!error.message.includes('message to delete not found')) {
+        console.log('Ошибка удаления сообщения:', error.message);
+      }
+    });
+  }
   
   // Отправляем новое сообщение
   sendImageWithText(chatId, imagePath, text, options);
@@ -988,18 +1046,18 @@ function handleBattleEnd(userId, victory) {
     console.log(`⚔️ Бой найден, враг: ${battle.enemy.name}`);
     
     const enemy = battle.enemy;
-    let goldReward = victory ? enemy.goldReward : Math.floor(enemy.goldReward * 0.2);
-    let expReward = victory ? enemy.expReward : Math.floor(enemy.expReward * 0.2);
+    let goldReward = victory ? enemy.goldReward : 0;  // Нет наград за поражение
+    let expReward = victory ? enemy.expReward : 0;    // Нет наград за поражение
     
     // Применяем бонус к опыту от способности расы (Адаптация человека)
-    expReward = raceAbilities.applyExpBonus(
+    expReward = Math.floor(raceAbilities.applyExpBonus(
       { specialAbility: battle.playerStats.specialAbility },
       expReward
-    );
+    ));
     
     // Применяем бонус к опыту от рун (Руна мастера)
     if (battle.playerStats.itemEffects && battle.playerStats.itemEffects.length > 0) {
-      expReward = raceAbilities.modifyExpWithItems(expReward, battle.playerStats.itemEffects);
+      expReward = Math.floor(raceAbilities.modifyExpWithItems(expReward, battle.playerStats.itemEffects));
     }
     
     // Уменьшаем награды от повторных боссов до минимума (ПЕРЕД применением бонусов пробуждения)
@@ -1012,10 +1070,14 @@ function handleBattleEnd(userId, victory) {
     const awakeningLevel = player.awakening_level || 0;
     if (awakeningLevel > 0) {
       const awakeningBonus = applyAwakeningBonus(goldReward, expReward, awakeningLevel);
-      goldReward = awakeningBonus.gold;
-      expReward = awakeningBonus.exp;
+      goldReward = Math.floor(awakeningBonus.gold);
+      expReward = Math.floor(awakeningBonus.exp);
       console.log(`[AWAKENING] Применены бонусы: уровень=${awakeningLevel}, множитель=x${awakeningBonus.multiplier.toFixed(1)}, золото=${goldReward}, опыт=${expReward}`);
     }
+    
+    // Финальное округление всех наград до целых чисел
+    goldReward = Math.floor(goldReward);
+    expReward = Math.floor(expReward);
     
     const crystalReward = victory && enemy.isBoss && !battle.isBossRerun ? enemy.crystalReward : 0;
     
@@ -1051,11 +1113,10 @@ function handleBattleEnd(userId, victory) {
           });
       }
       
-      // Определяем награды: при поражении от повторного моба/босса - нет наград
-      const isRepeatFight = battle.isBossRerun || (battle.selectedLevel && battle.selectedLevel < (player.forest_level || 1));
-      const actualGoldReward = (!victory && isRepeatFight) ? 0 : goldReward;
-      const actualExpReward = (!victory && isRepeatFight) ? 0 : expReward;
-      const actualCrystalReward = (!victory && isRepeatFight) ? 0 : crystalReward;
+      // Определяем награды: при поражении - нет наград вообще
+      const actualGoldReward = victory ? Math.floor(goldReward) : 0;
+      const actualExpReward = victory ? Math.floor(expReward) : 0;
+      const actualCrystalReward = victory ? Math.floor(crystalReward) : 0;
       
       // Обновляем игрока
       db.run(`UPDATE players SET 
@@ -1078,7 +1139,7 @@ function handleBattleEnd(userId, victory) {
           // Получаем обновленные данные игрока
           db.get(`SELECT gold, exp FROM players WHERE user_id = ?`, [userId], (err, updatedPlayer) => {
             const currentGold = updatedPlayer ? updatedPlayer.gold : (player.gold + actualGoldReward);
-            const currentExp = updatedPlayer ? updatedPlayer.exp : (player.exp + actualExpReward);
+            const currentExp = updatedPlayer ? Math.floor(updatedPlayer.exp) : Math.floor(player.exp + actualExpReward);
             
             const newForestLevel = (player.forest_level || 1) + (victory ? 1 : 0);
             const resultEmoji = victory ? '🎉' : '💀';
@@ -1093,7 +1154,7 @@ function handleBattleEnd(userId, victory) {
               message += ` повержен!\n🌲 Уровень леса: ${newForestLevel}\n\n`;
             } else {
               message += ` победил!\n🌲 Уровень леса: ${player.forest_level || 1} (не изменился)\n\n`;
-              if (!isRepeatFight) {
+              if (!battle.isBossRerun) {
                 message += `💡 Возвращайтесь через 30 секунд чтобы попробовать снова!\n\n`;
               }
             }
@@ -1113,7 +1174,7 @@ function handleBattleEnd(userId, victory) {
               if (battle.isBossRerun && victory) {
                 message += `📉 Награды уменьшены (повторный босс)\n`;
               }
-            } else if (!victory && isRepeatFight) {
+            } else if (!victory && battle.isBossRerun) {
               message += `❌ Награды не получены (повторный бой)\n\n`;
             }
             
@@ -1326,7 +1387,7 @@ function checkLevelUp(playerId) {
   db.get(`SELECT * FROM players WHERE user_id = ?`, [playerId], (err, player) => {
     if (err || !player) return;
     
-    const expNeeded = config.EXP_PER_LEVEL * Math.pow(config.EXP_MULTIPLIER, player.level - 1);
+    const expNeeded = Math.floor(config.EXP_PER_LEVEL * Math.pow(config.EXP_MULTIPLIER, player.level - 1));
     
     if (player.exp >= expNeeded) {
       const newLevel = player.level + 1;
@@ -1351,6 +1412,7 @@ function checkLevelUp(playerId) {
 // Главное меню
 function getMainMenu(hasRace = true) {
   const buttons = [];
+  const marketUrl = `${config.SERVER_URL}/marketplace`;
   
   if (!hasRace) {
     buttons.push([
@@ -1372,6 +1434,9 @@ function getMainMenu(hasRace = true) {
     buttons.push([
       { text: '🐉 Рейды', callback_data: 'raids_menu' },
       { text: '🛒 Магазин', callback_data: 'shop' }
+    ]);
+    buttons.push([
+      { text: '🏪 Маркетплейс', web_app: { url: marketUrl } }
     ]);
   }
   
@@ -1604,8 +1669,37 @@ function showRaceCard(chatId, messageId, races, currentIndex, userId) {
   message += `⚔️ Базовая атака: ${race.base_attack || 50}\n`;
   message += `🛡️ Базовая защита: ${race.base_defense || 30}\n`;
   
+  // Новые характеристики
+  if (race.base_speed !== undefined && race.base_speed !== null) {
+    message += `⚡ Скорость: ${race.base_speed}\n`;
+  }
+  if (race.element) {
+    const elementEmoji = {
+      'fire': '🔥',
+      'water': '💧',
+      'earth': '🌍',
+      'air': '💨',
+      'light': '✨',
+      'dark': '🌑',
+      'ice': '❄️',
+      'lightning': '⚡',
+      'nature': '🌿',
+      'metal': '⚙️'
+    };
+    message += `${elementEmoji[race.element] || '⭐'} Элемент: ${race.element}\n`;
+  }
+  if (race.base_dodge !== undefined && race.base_dodge !== null) {
+    message += `🎯 Уклонение: ${race.base_dodge}%\n`;
+  }
+  
   if (race.special_ability) {
     message += `\n✨ Способность: ${race.special_ability}`;
+    
+    // Добавляем подробное описание способности
+    const abilityDesc = getAbilityDescription(race.special_ability);
+    if (abilityDesc) {
+      message += `\n   ${abilityDesc}`;
+    }
   }
   
   const buttons = [];
@@ -1907,7 +2001,7 @@ function showRaidBossSelection(chatId, messageId, currentIndex = 0, userId, admi
 
 // Функция показа меню битвы с боссом
 function showRaidBattleMenu(chatId, messageId, raidId, userId) {
-  console.log(`⚔️ Открываем меню битвы: raidId=${raidId}, userId=${userId}`);
+  console.log(`⚔️ Открываем меню битвы: raidId=${raidId}, userId=${userId}, messageId=${messageId}`);
   
   // Получаем информацию о рейде
   db.get(`SELECT ar.*, rb.image as boss_image 
@@ -1916,7 +2010,7 @@ function showRaidBattleMenu(chatId, messageId, raidId, userId) {
           WHERE ar.id = ?`, [raidId], (err, raid) => {
     if (err || !raid) {
       console.error('Ошибка получения рейда:', err);
-      return safeEditMessageText(chatId, messageId, '❌ Рейд не найден', {
+      return bot.sendMessage(chatId, '❌ Рейд не найден', {
         reply_markup: {
           inline_keyboard: [[{ text: '🔙 К выбору боссов', callback_data: 'select_raid_boss' }]]
         }
@@ -1972,11 +2066,18 @@ function showRaidBattleMenu(chatId, messageId, raidId, userId) {
         [{ text: '🔙 К выбору боссов', callback_data: 'select_raid_boss' }]
       ];
       
-      // Отправляем сообщение с изображением босса
-      editImageWithText(chatId, messageId, `raids/${raid.boss_image}`, message, {
-        parse_mode: 'Markdown',
-        reply_markup: { inline_keyboard: buttons }
-      });
+      // Если messageId есть, редактируем сообщение, иначе отправляем новое
+      if (messageId) {
+        editImageWithText(chatId, messageId, `raids/${raid.boss_image}`, message, {
+          parse_mode: 'Markdown',
+          reply_markup: { inline_keyboard: buttons }
+        });
+      } else {
+        sendImageWithText(chatId, `raids/${raid.boss_image}`, message, {
+          parse_mode: 'Markdown',
+          reply_markup: { inline_keyboard: buttons }
+        });
+      }
     });
   });
 }
@@ -2066,7 +2167,7 @@ bot.onText(/\/start(?:\s+(.+))?/, async (msg, match) => {
         sendImageWithText(userId, `races/${raceImage}`,
           `${vipIcon}${player.display_name || username}\n\n` +
           `${rarityIcon} ${race.name} • Ур.${player.level}\n` +
-          `⚡ ${player.power} | 💰 ${player.gold} | 💎 ${player.crystals}`,
+          `⚡ ${smartFormat(player.power)} | 💰 ${smartFormat(player.gold)} | 💎 ${smartFormat(player.crystals)}`,
           getMainMenu(true)
         );
       });
@@ -2426,8 +2527,9 @@ bot.onText(/\/speedupraid(?:\s+(.+))?/, async (msg, match) => {
       '📝 Использование: /speedupraid <имя_босса>\n\n' +
       'Примеры:\n' +
       '/speedupraid Повелитель ветра\n' +
-      '/speedupraid Владыка тьмы\n\n' +
-      'Эта команда установит кулдаун босса на 1 минуту.'
+      '/speedupraid Владыка тьмы\n' +
+      '/speedupraid Абаддон\n\n' +
+      'Эта команда установит кулдаун босса на 10 минут.'
     );
   }
   
@@ -2441,8 +2543,8 @@ bot.onText(/\/speedupraid(?:\s+(.+))?/, async (msg, match) => {
       `⏱️ *Кулдаун ускорен!*\n\n` +
       `🐉 Босс: ${result.boss_name}\n` +
       `⏰ Кулдаун: ${result.cooldown_hours} часов\n` +
-      `✅ Рейд будет доступен через 1 минуту\n\n` +
-      `Откройте меню рейдов через минуту чтобы начать рейд.`,
+      `✅ Рейд будет доступен через 10 минут\n\n` +
+      `Откройте меню рейдов через 10 минут чтобы начать рейд.`,
       { parse_mode: 'Markdown' }
     );
   });
@@ -2521,7 +2623,7 @@ bot.onText(/\/playerinfo(?:\s+(.+))?/, async (msg, match) => {
         `💎 VIP: ${player.is_vip ? 'Да' : 'Нет'}\n\n` +
         `🧬 Раса: ${raceName} (${raceRarity})\n` +
         `⭐ Уровень: ${player.level}\n` +
-        `✨ Опыт: ${smartFormat(player.exp)}\n\n` +
+        `✨ Опыт: ${smartFormat(Math.floor(player.exp))}\n\n` +
         `💰 Золото: ${smartFormat(player.gold)}\n` +
         `💎 Кристаллы: ${smartFormat(player.crystals)}\n\n` +
         `🏆 Побед: ${player.wins}\n` +
@@ -2641,6 +2743,86 @@ bot.on('message', (msg) => {
         '✅ Фото расы получено!\n\n' +
         'Шаг 2/7: Введите название расы:'
       );
+      return;
+    }
+    
+    // Фото для глобальной рассылки
+    if (state.action === 'awaiting_broadcast_message' && username === config.ADMIN_USERNAME) {
+      const photo = msg.photo[msg.photo.length - 1];
+      const caption = msg.caption || '';
+      
+      // Проверяем длину подписи (Telegram лимит 1024 символа для подписи)
+      if (caption.length > 1024) {
+        return bot.sendMessage(userId, `❌ Подпись к фото слишком длинная (${caption.length} символов). Максимум 1024 символа. Сократите текст:`);
+      }
+      
+      // Проверяем на потенциально проблемные символы в подписи
+      const problematicChars = caption.match(/[\u0000-\u001F\u007F-\u009F]/g);
+      if (problematicChars) {
+        return bot.sendMessage(userId, 
+          `❌ В подписи к фото есть недопустимые символы. Удалите специальные символы и попробуйте снова.\n\n` +
+          `Проблемные символы: ${problematicChars.join(', ')}`
+        );
+      }
+      
+      // Сохраняем фото и подпись для предпросмотра
+      state.broadcastPhoto = photo.file_id;
+      state.broadcastCaption = caption;
+      state.action = 'broadcast_photo_preview';
+      
+      // Получаем количество игроков для предпросмотра
+      db.get(`SELECT COUNT(*) as total FROM players`, (err, result) => {
+        if (err || !result) {
+          adminState.delete(userId);
+          return bot.sendMessage(userId, '❌ Ошибка получения количества игроков');
+        }
+        
+        const totalPlayers = result.total;
+        
+        // Показываем предпросмотр фото с подписью
+        bot.sendPhoto(userId, photo.file_id, {
+          caption: 
+            `📋 *ПРЕДПРОСМОТР ГЛОБАЛЬНОГО СООБЩЕНИЯ С ФОТО*\n\n` +
+            `👥 Получателей: ${totalPlayers} игроков\n` +
+            `📏 Длина подписи: ${caption.length} символов\n\n` +
+            `📝 *Подпись:*\n${caption || '(без подписи)'}\n\n` +
+            `⚠️ Сообщение будет отправлено ВСЕМ игрокам без возможности отмены!`,
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [
+                { text: '✅ Отправить', callback_data: 'confirm_broadcast_photo' },
+                { text: '❌ Отмена', callback_data: 'cancel_broadcast' }
+              ],
+              [
+                { text: '✏️ Изменить фото', callback_data: 'edit_broadcast_photo' }
+              ]
+            ]
+          }
+        });
+      });
+      return;
+    }
+    
+    // Фото для личного сообщения
+    if (state.action === 'awaiting_private_message_text' && username === config.ADMIN_USERNAME) {
+      const photo = msg.photo[msg.photo.length - 1];
+      const caption = msg.caption || '';
+      
+      bot.sendPhoto(state.targetUserId, photo.file_id, {
+        caption: caption,
+        parse_mode: 'Markdown'
+      }).then(() => {
+        adminState.delete(userId);
+        bot.sendMessage(userId,
+          `✅ *Фото отправлено!*\n\n` +
+          `👤 Получатель: ${state.targetUsername} (ID: ${state.targetUserId})`,
+          { parse_mode: 'Markdown' }
+        );
+      }).catch((err) => {
+        adminState.delete(userId);
+        bot.sendMessage(userId, `❌ Ошибка отправки фото: ${err.message}`);
+      });
       return;
     }
   }
@@ -3432,44 +3614,60 @@ bot.on('message', (msg) => {
       return bot.sendMessage(userId, '❌ Сообщение не может быть пустым. Попробуйте еще раз:');
     }
     
-    // Получаем всех игроков
-    db.all(`SELECT user_id FROM players`, (err, players) => {
-      if (err || !players || players.length === 0) {
+    // Проверяем длину сообщения (Telegram лимит 4096 символов)
+    if (message.length > 4096) {
+      return bot.sendMessage(userId, `❌ Сообщение слишком длинное (${message.length} символов). Максимум 4096 символов. Сократите текст:`);
+    }
+    
+    // Проверяем на потенциально проблемные символы
+    const problematicChars = message.match(/[\u0000-\u001F\u007F-\u009F]/g);
+    if (problematicChars) {
+      return bot.sendMessage(userId, 
+        `❌ В сообщении есть недопустимые символы. Удалите специальные символы и попробуйте снова.\n\n` +
+        `Проблемные символы: ${problematicChars.join(', ')}`
+      );
+    }
+    
+    // Сохраняем сообщение для предпросмотра
+    state.broadcastMessage = message;
+    state.action = 'broadcast_preview';
+    
+    // Получаем количество игроков для предпросмотра
+    db.get(`SELECT COUNT(*) as total FROM players`, (err, result) => {
+      if (err || !result) {
         adminState.delete(userId);
-        return bot.sendMessage(userId, '❌ Ошибка получения списка игроков');
+        return bot.sendMessage(userId, '❌ Ошибка получения количества игроков');
       }
       
-      let successCount = 0;
-      let failCount = 0;
+      const totalPlayers = result.total;
       
-      // Отправляем сообщение всем игрокам
-      players.forEach((player, index) => {
-        setTimeout(() => {
-          bot.sendMessage(player.user_id, 
-            `📢 *ОБЪЯВЛЕНИЕ ОТ АДМИНИСТРАЦИИ*\n\n${message}`,
-            { parse_mode: 'Markdown' }
-          ).then(() => {
-            successCount++;
-          }).catch(() => {
-            failCount++;
-          }).finally(() => {
-            // Когда все сообщения отправлены
-            if (index === players.length - 1) {
-              setTimeout(() => {
-                adminState.delete(userId);
-                bot.sendMessage(userId, 
-                  `✅ *Рассылка завершена!*\n\n` +
-                  `📤 Отправлено: ${successCount}\n` +
-                  `❌ Ошибок: ${failCount}\n` +
-                  `👥 Всего игроков: ${players.length}`,
-                  { parse_mode: 'Markdown' }
-                );
-              }, 1000);
-            }
-          });
-        }, index * 100); // Задержка 100мс между сообщениями
-      });
+      // Показываем предпросмотр сообщения
+      bot.sendMessage(userId,
+        `📋 *ПРЕДПРОСМОТР ГЛОБАЛЬНОГО СООБЩЕНИЯ*\n\n` +
+        `👥 Получателей: ${totalPlayers} игроков\n` +
+        `📏 Длина: ${message.length} символов\n\n` +
+        `📝 *Текст сообщения:*\n` +
+        `${message}\n\n` +
+        `⚠️ Сообщение будет отправлено ВСЕМ игрокам без возможности отмены!`,
+        {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [
+                { text: '✅ Отправить', callback_data: 'confirm_broadcast' },
+                { text: '❌ Отмена', callback_data: 'cancel_broadcast' }
+              ],
+              [
+                { text: '✏️ Изменить текст', callback_data: 'edit_broadcast' }
+              ]
+            ]
+          }
+        }
+      );
     });
+  } else if (state.action === 'awaiting_broadcast_photo') {
+    // Ожидаем фото для глобальной рассылки - но пришел текст
+    return bot.sendMessage(userId, '📸 Пожалуйста, отправьте фото (или /cancel для отмены)');
   } else if (state.action === 'awaiting_private_message_user_id') {
     const targetUserId = parseInt(text);
     
@@ -3504,9 +3702,7 @@ bot.on('message', (msg) => {
     }
     
     // Отправляем сообщение игроку
-    bot.sendMessage(state.targetUserId, 
-      `💬 *СООБЩЕНИЕ ОТ АДМИНИСТРАЦИИ*\n\n${message}`,
-      { parse_mode: 'Markdown' }
+    bot.sendMessage(state.targetUserId, message, { parse_mode: 'Markdown' }
     ).then(() => {
       adminState.delete(userId);
       bot.sendMessage(userId, 
@@ -3516,10 +3712,11 @@ bot.on('message', (msg) => {
       );
     }).catch((err) => {
       adminState.delete(userId);
-      bot.sendMessage(userId, 
-        `❌ Ошибка отправки сообщения: ${err.message}`
-      );
+      bot.sendMessage(userId, `❌ Ошибка отправки сообщения: ${err.message}`);
     });
+  } else if (state.action === 'awaiting_private_photo') {
+    // Ожидаем фото для личного сообщения - но пришел текст
+    return bot.sendMessage(userId, '📸 Пожалуйста, отправьте фото (или /cancel для отмены)');
   }
   
   // Обработчики создания босса
@@ -4005,7 +4202,7 @@ bot.onText(/\/profile/, async (msg) => {
     
     db.get(`SELECT * FROM races WHERE id = ?`, [player.race_id], (err, race) => {
       const rarityIcon = config.RARITY[race.rarity].color;
-      const expNeeded = config.EXP_PER_LEVEL * Math.pow(config.EXP_MULTIPLIER, player.level - 1);
+      const expNeeded = Math.floor(config.EXP_PER_LEVEL * Math.pow(config.EXP_MULTIPLIER, player.level - 1));
       const winRate = player.wins + player.losses > 0 
         ? ((player.wins / (player.wins + player.losses)) * 100).toFixed(1) 
         : 0;
@@ -4016,7 +4213,7 @@ bot.onText(/\/profile/, async (msg) => {
           `🆔 ID: ${player.user_id}\n` +
           `👤 Имя: ${player.username}\n` +
           `📊 Уровень: ${player.level}\n` +
-          `✨ Опыт: ${smartFormat(player.exp)}/${smartFormat(Math.floor(expNeeded))}\n` +
+          `✨ Опыт: ${smartFormat(Math.floor(player.exp))}/${smartFormat(Math.floor(expNeeded))}\n` +
           `💰 Золото: ${smartFormat(player.gold)}\n\n` +
           `${rarityIcon} Раса: ${race.name} (${config.RARITY[race.rarity].name})\n` +
           `🌟 Пробуждение: ${player.awakening_level}\n\n` +
@@ -4060,17 +4257,42 @@ bot.onText(/\/race/, (msg) => {
       }
       
       function sendRaceInfo() {
-        bot.sendMessage(userId,
-          `${rarityIcon} ${race.name}\n\n` +
+        let raceMessage = `${rarityIcon} ${race.name}\n\n` +
           `📝 Описание: ${race.description}\n` +
           `⭐ Редкость: ${config.RARITY[race.rarity].name}\n` +
           `${race.is_legendary ? '👑 ЛЕГЕНДАРНАЯ РАСА\n' : ''}\n` +
           `⚡ Базовая сила: ${race.base_power}\n` +
           `❤️ Базовое HP: ${race.base_hp}\n` +
           `🗡️ Базовая атака: ${race.base_attack}\n` +
-          `🛡️ Базовая защита: ${race.base_defense}\n\n` +
-          `🎯 Особенность: ${race.special_ability}` +
-          parentInfo
+          `🛡️ Базовая защита: ${race.base_defense}\n`;
+        
+        // Добавляем новые характеристики
+        if (race.base_speed !== undefined && race.base_speed !== null) {
+          raceMessage += `⚡ Скорость: ${race.base_speed}\n`;
+        }
+        if (race.element) {
+          const elementEmoji = {
+            'fire': '🔥', 'water': '💧', 'earth': '🌍', 'air': '💨',
+            'light': '✨', 'dark': '🌑', 'ice': '❄️', 'lightning': '⚡',
+            'nature': '🌿', 'metal': '⚙️'
+          };
+          raceMessage += `${elementEmoji[race.element] || '⭐'} Элемент: ${race.element}\n`;
+        }
+        if (race.base_dodge !== undefined && race.base_dodge !== null) {
+          raceMessage += `🎯 Уклонение: ${race.base_dodge}%\n`;
+        }
+        
+        raceMessage += `\n🎯 Особенность: ${race.special_ability}`;
+        
+        // Добавляем подробное описание способности
+        const abilityDesc = getAbilityDescription(race.special_ability);
+        if (abilityDesc) {
+          raceMessage += `\n   ${abilityDesc}`;
+        }
+        
+        raceMessage += parentInfo;
+        
+        bot.sendMessage(userId, raceMessage
         );
       }
     });
@@ -4231,7 +4453,7 @@ bot.onText(/\/top/, (msg) => {
       const raceName = player.race_name || 'Без расы';
       
       message += `${medal} ${vipIcon}${displayName} ${rarityIcon}${raceName}\n`;
-      message += `   🌲 Лес: ${player.forest_level || 1} | ⚡ ${player.power} | 💰 ${player.gold}\n\n`;
+      message += `   🌲 Лес: ${player.forest_level || 1} | ⚡ ${smartFormat(player.power)} | 💰 ${smartFormat(player.gold)}\n\n`;
     });
     
     bot.sendMessage(msg.chat.id, message);
@@ -4429,6 +4651,11 @@ bot.on('callback_query', async (query) => {
   const isSubscribed = await requireSubscription(userId, chatId);
   if (!isSubscribed) return;
   
+  // Игнорируем callback от adventure бота
+  if (data.startsWith('adv_')) {
+    return; // Пусть adventure бот обработает
+  }
+  
   // Проверяем, не находится ли игрок в бою (кроме боевых действий)
   const battleActions = ['battle_attack', 'battle_defend', 'battle_special', 'battle_use_potion'];
   if (!battleActions.includes(data)) {
@@ -4613,6 +4840,11 @@ bot.on('callback_query', async (query) => {
   console.log(`🔀 Обработка switch для data="${data}"`);
   
   switch(data) {
+    case 'noop':
+      // Пустой обработчик для кнопок-индикаторов
+      bot.answerCallbackQuery(query.id);
+      break;
+      
     case 'main_menu':
       getOrCreatePlayer(userId, query.from.username, (err, player) => {
         editImageWithText(chatId, messageId, 'main_menu.jpg', '🎮 Главное меню:', {
@@ -4777,7 +5009,7 @@ bot.on('callback_query', async (query) => {
       getOrCreatePlayer(userId, query.from.username, (err, player) => {
         editImageWithText(chatId, messageId, 'rewards_menu.jpg',
           '🎁 *Награды*\n\n' +
-          `💰 ${player.gold} | 💎 ${player.crystals}\n\n` +
+          `💰 ${smartFormat(player.gold)} | 💎 ${smartFormat(player.crystals)}\n\n` +
           'Выберите действие:',
           {
             parse_mode: 'Markdown',
@@ -4845,7 +5077,7 @@ bot.on('callback_query', async (query) => {
         
         editImageWithText(chatId, messageId, 'shop_menu.jpg',
           `🛒 *Магазин*\n\n` +
-          `💰 Ваше золото: ${player.gold}\n\n` +
+          `💰 Ваше золото: ${smartFormat(player.gold)}\n\n` +
           `Выберите категорию:`,
           {
             parse_mode: 'Markdown',
@@ -4870,7 +5102,7 @@ bot.on('callback_query', async (query) => {
             return bot.sendMessage(userId, '❌ Ошибка загрузки зелий');
           }
           
-          let message = `🧪 *Магазин зелий*\n\n💰 Ваше золото: ${player.gold}\n\n`;
+          let message = `🧪 *Магазин зелий*\n\n💰 Ваше золото: ${smartFormat(player.gold)}\n\n`;
           const buttons = [];
           
           allPotions.forEach(potion => {
@@ -4895,27 +5127,114 @@ bot.on('callback_query', async (query) => {
       break;
       
     case 'shop_donate':
-      bot.sendMessage(userId,
-        `💎 *Донат магазин*\n\n` +
-        `💎 *Кристаллы:*\n` +
-        `• 100 кристаллов - 119₽\n` +
-        `• 200 кристаллов - 219₽\n` +
-        `• 500 кристаллов - 420₽\n\n` +
-        `⭐ *VIP статус:*\n` +
-        `• VIP подписка - 300₽\n\n` +
-        `⏰ *Другое:*\n` +
-        `• Сброс всех КД - 79₽\n\n` +
-        `📞 Для покупки пишите: @trimetillllll`,
-        {
-          parse_mode: 'Markdown',
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: '💬 Написать @trimetillllll', url: 'https://t.me/trimetillllll' }],
-              [{ text: '🔙 Назад', callback_data: 'shop' }]
-            ]
+      getOrCreatePlayer(userId, query.from.username, (err, player) => {
+        if (err) return bot.answerCallbackQuery(query.id);
+
+        const vipStatus = player.is_vip
+          ? `✅ У вас активен VIP до ${new Date(player.vip_until * 1000).toLocaleDateString('ru-RU')}`
+          : `❌ VIP не активен`;
+
+        safeEditMessageText(chatId, messageId,
+          `⭐ *Донат магазин*\n\n` +
+          `Все покупки через Telegram Stars — моментально!\n\n` +
+          `💎 *Кристаллы:*\n` +
+          `• 100 кристаллов — 50 ⭐\n` +
+          `• 250 кристаллов — 100 ⭐\n` +
+          `• 700 кристаллов — 250 ⭐\n\n` +
+          `👑 *VIP статус (30 дней):*\n` +
+          `• Доступ к созданию клана\n` +
+          `• 5 ежедневных квестов (вместо 3)\n` +
+          `• Иконка 💎 в рейтинге\n` +
+          `• Стоимость: 150 ⭐\n\n` +
+          `⏰ *Сброс кулдаунов:*\n` +
+          `• Сброс всех кулдаунов — 30 ⭐\n\n` +
+          `${vipStatus}`,
+          {
+            parse_mode: 'Markdown',
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  { text: '💎 100 кристаллов (50 ⭐)', callback_data: 'buy_crystals_100' },
+                ],
+                [
+                  { text: '💎 250 кристаллов (100 ⭐)', callback_data: 'buy_crystals_250' },
+                ],
+                [
+                  { text: '💎 700 кристаллов (250 ⭐)', callback_data: 'buy_crystals_700' },
+                ],
+                [
+                  { text: '👑 VIP 30 дней (150 ⭐)', callback_data: 'buy_vip_30' },
+                ],
+                [
+                  { text: '⏰ Сброс кулдаунов (30 ⭐)', callback_data: 'buy_reset_cd' },
+                ],
+                [{ text: '🔙 Назад', callback_data: 'shop' }]
+              ]
+            }
           }
-        }
-      );
+        );
+      });
+      break;
+
+    // ===== ПОКУПКА КРИСТАЛЛОВ =====
+    case 'buy_crystals_100':
+    case 'buy_crystals_250':
+    case 'buy_crystals_700': {
+      const crystalPacks = {
+        'buy_crystals_100': { amount: 100, stars: 50,  title: '💎 100 кристаллов',  payload: 'crystals_100' },
+        'buy_crystals_250': { amount: 250, stars: 100, title: '💎 250 кристаллов', payload: 'crystals_250' },
+        'buy_crystals_700': { amount: 700, stars: 250, title: '💎 700 кристаллов', payload: 'crystals_700' },
+      };
+      const pack = crystalPacks[data];
+
+      bot.answerCallbackQuery(query.id);
+      bot.sendInvoice(
+        chatId,
+        pack.title,
+        `Получите ${pack.amount} кристаллов для игры Zilsor Race`,
+        pack.payload,
+        '',           // provider_token — пустой для Stars
+        'XTR',        // валюта Stars
+        [{ label: pack.title, amount: pack.stars }]
+      ).catch(err => {
+        console.error('Ошибка sendInvoice:', err.message);
+        bot.sendMessage(chatId, '❌ Ошибка создания платежа. Попробуйте позже.');
+      });
+      break;
+    }
+
+    // ===== ПОКУПКА VIP =====
+    case 'buy_vip_30':
+      bot.answerCallbackQuery(query.id);
+      bot.sendInvoice(
+        chatId,
+        '👑 VIP статус на 30 дней',
+        'VIP статус на 30 дней: 5 квестов в день, создание клана, иконка в рейтинге',
+        'vip_30',
+        '',
+        'XTR',
+        [{ label: 'VIP 30 дней', amount: 150 }]
+      ).catch(err => {
+        console.error('Ошибка sendInvoice VIP:', err.message);
+        bot.sendMessage(chatId, '❌ Ошибка создания платежа. Попробуйте позже.');
+      });
+      break;
+
+    // ===== СБРОС КУЛДАУНОВ =====
+    case 'buy_reset_cd':
+      bot.answerCallbackQuery(query.id);
+      bot.sendInvoice(
+        chatId,
+        '⏰ Сброс всех кулдаунов',
+        'Мгновенный сброс всех кулдаунов: лес, работа, дуэли',
+        'reset_cooldowns',
+        '',
+        'XTR',
+        [{ label: 'Сброс кулдаунов', amount: 30 }]
+      ).catch(err => {
+        console.error('Ошибка sendInvoice CD:', err.message);
+        bot.sendMessage(chatId, '❌ Ошибка создания платежа. Попробуйте позже.');
+      });
       break;
       
     case 'raids_menu':
@@ -4959,7 +5278,7 @@ bot.on('callback_query', async (query) => {
           
           const rarityIcon = config.RARITY[race.rarity].color;
           const vipIcon = player.is_vip ? '💎 ' : '';
-          const expNeeded = config.EXP_PER_LEVEL * Math.pow(config.EXP_MULTIPLIER, player.level - 1);
+          const expNeeded = Math.floor(config.EXP_PER_LEVEL * Math.pow(config.EXP_MULTIPLIER, player.level - 1));
           const winRate = player.wins + player.losses > 0 
             ? ((player.wins / (player.wins + player.losses)) * 100).toFixed(1) 
             : 0;
@@ -4981,10 +5300,10 @@ bot.on('callback_query', async (query) => {
             editImageWithText(chatId, messageId, `races/${raceImage}`,
               `${vipIcon}${player.display_name || player.username}\n\n` +
               `${rarityIcon} ${race.name} • Ур.${player.level}\n` +
-              `✨ ${player.exp}/${Math.floor(expNeeded)} XP\n` +
-              `💰 ${player.gold} | 💎 ${player.crystals}\n\n` +
+              `✨ ${smartFormat(Math.floor(player.exp))}/${smartFormat(Math.floor(expNeeded))} XP\n` +
+              `💰 ${smartFormat(player.gold)} | 💎 ${smartFormat(player.crystals)}\n\n` +
               `⚔️ Характеристики\n` +
-              `⚡ ${stats.power} | ❤️ ${stats.hp}\n` +
+              `⚡ ${smartFormat(stats.power)} | ❤️ ${smartFormat(stats.hp)}\n` +
               `🗡️ ${stats.attack} | 🛡️ ${stats.defense}\n` +
               `🏃 ${stats.speed} (${speedDescription})${elementsText}\n\n` +
               `🏆 Статистика:\n` +
@@ -5618,9 +5937,317 @@ bot.on('callback_query', async (query) => {
       
       safeEditMessageText(chatId, messageId,
         `📢 *Глобальное сообщение*\n\n` +
-        `Введите текст сообщения, которое будет отправлено ВСЕМ игрокам:\n\n` +
-        `💡 Поддерживается Markdown форматирование`,
+        `Введите текст или отправьте фото с подписью.\n` +
+        `Сообщение будет отправлено ВСЕМ игрокам без каких-либо надписей.`,
         {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '❌ Отмена', callback_data: 'admin_back' }]
+            ]
+          }
+        }
+      );
+      break;
+      
+    // Обработчики предпросмотра глобального сообщения
+    case 'confirm_broadcast':
+      if (query.from.username !== config.ADMIN_USERNAME) {
+        return bot.answerCallbackQuery(query.id, { text: '❌ Нет прав', show_alert: true });
+      }
+      
+      const state = adminState.get(userId);
+      if (!state || !state.broadcastMessage) {
+        return bot.answerCallbackQuery(query.id, { text: '❌ Сообщение не найдено', show_alert: true });
+      }
+      
+      const message = state.broadcastMessage;
+      
+      // Получаем всех игроков
+      db.all(`SELECT user_id FROM players`, (err, players) => {
+        if (err || !players || players.length === 0) {
+          adminState.delete(userId);
+          return bot.editMessageText('❌ Ошибка получения списка игроков', {
+            chat_id: chatId,
+            message_id: messageId
+          });
+        }
+        
+        let successCount = 0;
+        let failCount = 0;
+        const errors = [];
+        
+        console.log(`📢 Начинаем глобальную рассылку для ${players.length} игроков`);
+        console.log(`📝 Текст сообщения: ${message.substring(0, 100)}...`);
+        
+        // Показываем прогресс
+        bot.editMessageText(
+          `📤 *ОТПРАВКА ГЛОБАЛЬНОГО СООБЩЕНИЯ*\n\n` +
+          `👥 Отправляем ${players.length} игрокам...\n` +
+          `⏳ Пожалуйста, подождите...`,
+          {
+            chat_id: chatId,
+            message_id: messageId,
+            parse_mode: 'Markdown'
+          }
+        );
+        
+        // Отправляем сообщение всем игрокам
+        players.forEach((player, index) => {
+          setTimeout(() => {
+            // Функция для безопасной отправки сообщения
+            const sendSafeMessage = (userId, text, options = {}) => {
+              return new Promise((resolve, reject) => {
+                // Очищаем текст от потенциально проблемных символов
+                const cleanText = text.replace(/[\u0000-\u001F\u007F-\u009F]/g, '');
+                
+                bot.sendMessage(userId, cleanText, options)
+                  .then(resolve)
+                  .catch((error) => {
+                    // Если ошибка связана с форматированием, пробуем без parse_mode
+                    if (error.message.includes('parse') || error.message.includes('format') || error.code === 400) {
+                      bot.sendMessage(userId, cleanText)
+                        .then(resolve)
+                        .catch(reject);
+                    } else {
+                      reject(error);
+                    }
+                  });
+              });
+            };
+            
+            // Пробуем отправить с HTML форматированием
+            sendSafeMessage(player.user_id, message, { parse_mode: 'HTML' })
+              .then(() => {
+                successCount++;
+                console.log(`✅ Сообщение отправлено игроку ${player.user_id}`);
+              })
+              .catch((error) => {
+                console.log(`❌ Ошибка отправки игроку ${player.user_id}:`, error.message);
+                
+                // Пробуем без форматирования
+                sendSafeMessage(player.user_id, message)
+                  .then(() => {
+                    successCount++;
+                    console.log(`✅ Сообщение отправлено игроку ${player.user_id} без форматирования`);
+                  })
+                  .catch((error2) => {
+                    failCount++;
+                    const errorMsg = error2.message || 'Неизвестная ошибка';
+                    errors.push(`${player.user_id}: ${errorMsg.substring(0, 100)}`);
+                    console.log(`❌ Полная ошибка отправки игроку ${player.user_id}:`, errorMsg);
+                  });
+              })
+              .finally(() => {
+                if (index === players.length - 1) {
+                  setTimeout(() => {
+                    adminState.delete(userId);
+                    
+                    let resultMessage = `✅ *Рассылка завершена!*\n\n` +
+                      `📤 Отправлено: ${successCount}\n` +
+                      `❌ Ошибок: ${failCount}\n` +
+                      `👥 Всего игроков: ${players.length}`;
+                    
+                    if (errors.length > 0 && errors.length <= 5) {
+                      resultMessage += `\n\n🔍 Примеры ошибок:\n${errors.slice(0, 5).join('\n')}`;
+                    }
+                    
+                    bot.editMessageText(resultMessage, {
+                      chat_id: chatId,
+                      message_id: messageId,
+                      parse_mode: 'Markdown',
+                      reply_markup: {
+                        inline_keyboard: [
+                          [{ text: '🔙 Назад в админ-панель', callback_data: 'admin_back' }]
+                        ]
+                      }
+                    });
+                  }, 3000); // Увеличиваем задержку для обработки всех сообщений
+                }
+              });
+          }, index * 200); // Увеличиваем интервал между отправками
+        });
+      });
+      break;
+      
+    case 'cancel_broadcast':
+      if (query.from.username !== config.ADMIN_USERNAME) {
+        return bot.answerCallbackQuery(query.id, { text: '❌ Нет прав', show_alert: true });
+      }
+      
+      adminState.delete(userId);
+      bot.answerCallbackQuery(query.id, { text: '❌ Рассылка отменена' });
+      
+      // Возвращаемся в админ-панель
+      bot.emit('callback_query', { ...query, data: 'admin_back' });
+      break;
+      
+    case 'edit_broadcast':
+      if (query.from.username !== config.ADMIN_USERNAME) {
+        return bot.answerCallbackQuery(query.id, { text: '❌ Нет прав', show_alert: true });
+      }
+      
+      adminState.set(userId, { action: 'awaiting_broadcast_message' });
+      
+      bot.editMessageText(
+        `📢 *Глобальное сообщение*\n\n` +
+        `Введите новый текст или отправьте фото с подписью.\n` +
+        `Сообщение будет отправлено ВСЕМ игрокам без каких-либо надписей.`,
+        {
+          chat_id: chatId,
+          message_id: messageId,
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '❌ Отмена', callback_data: 'admin_back' }]
+            ]
+          }
+        }
+      );
+      break;
+      
+    // Обработчики предпросмотра фото
+    case 'confirm_broadcast_photo':
+      if (query.from.username !== config.ADMIN_USERNAME) {
+        return bot.answerCallbackQuery(query.id, { text: '❌ Нет прав', show_alert: true });
+      }
+      
+      const photoState = adminState.get(userId);
+      if (!photoState || !photoState.broadcastPhoto) {
+        return bot.answerCallbackQuery(query.id, { text: '❌ Фото не найдено', show_alert: true });
+      }
+      
+      const photoId = photoState.broadcastPhoto;
+      const caption = photoState.broadcastCaption || '';
+      
+      // Получаем всех игроков
+      db.all(`SELECT user_id FROM players`, (err, players) => {
+        if (err || !players || players.length === 0) {
+          adminState.delete(userId);
+          return bot.editMessageCaption(
+            '❌ Ошибка получения списка игроков',
+            {
+              chat_id: chatId,
+              message_id: messageId
+            }
+          );
+        }
+        
+        let successCount = 0;
+        let failCount = 0;
+        const errors = [];
+        
+        console.log(`📢 Начинаем глобальную рассылку фото для ${players.length} игроков`);
+        console.log(`📝 Подпись: ${caption.substring(0, 100)}...`);
+        
+        // Показываем прогресс
+        bot.editMessageCaption(
+          `📤 *ОТПРАВКА ГЛОБАЛЬНОГО СООБЩЕНИЯ С ФОТО*\n\n` +
+          `👥 Отправляем ${players.length} игрокам...\n` +
+          `⏳ Пожалуйста, подождите...`,
+          {
+            chat_id: chatId,
+            message_id: messageId,
+            parse_mode: 'Markdown'
+          }
+        );
+        
+        // Отправляем фото всем игрокам
+        players.forEach((player, index) => {
+          setTimeout(() => {
+            // Функция для безопасной отправки фото
+            const sendSafePhoto = (userId, photoId, options = {}) => {
+              return new Promise((resolve, reject) => {
+                // Очищаем подпись от потенциально проблемных символов
+                if (options.caption) {
+                  options.caption = options.caption.replace(/[\u0000-\u001F\u007F-\u009F]/g, '');
+                }
+                
+                bot.sendPhoto(userId, photoId, options)
+                  .then(resolve)
+                  .catch((error) => {
+                    // Если ошибка связана с форматированием, пробуем без parse_mode
+                    if (error.message.includes('parse') || error.message.includes('format') || error.code === 400) {
+                      const newOptions = { ...options };
+                      delete newOptions.parse_mode;
+                      bot.sendPhoto(userId, photoId, newOptions)
+                        .then(resolve)
+                        .catch(reject);
+                    } else {
+                      reject(error);
+                    }
+                  });
+              });
+            };
+            
+            // Пробуем отправить с HTML форматированием
+            sendSafePhoto(player.user_id, photoId, {
+              caption: caption,
+              parse_mode: 'HTML'
+            }).then(() => {
+              successCount++;
+              console.log(`✅ Фото отправлено игроку ${player.user_id}`);
+            }).catch((error) => {
+              console.log(`❌ Ошибка отправки фото игроку ${player.user_id}:`, error.message);
+              
+              // Пробуем без форматирования
+              sendSafePhoto(player.user_id, photoId, {
+                caption: caption
+              }).then(() => {
+                successCount++;
+                console.log(`✅ Фото отправлено игроку ${player.user_id} без форматирования`);
+              }).catch((error2) => {
+                failCount++;
+                const errorMsg = error2.message || 'Неизвестная ошибка';
+                errors.push(`${player.user_id}: ${errorMsg.substring(0, 100)}`);
+                console.log(`❌ Полная ошибка отправки фото игроку ${player.user_id}:`, errorMsg);
+              });
+            }).finally(() => {
+              if (index === players.length - 1) {
+                setTimeout(() => {
+                  adminState.delete(userId);
+                  
+                  let resultMessage = `✅ *Рассылка с фото завершена!*\n\n` +
+                    `📤 Отправлено: ${successCount}\n` +
+                    `❌ Ошибок: ${failCount}\n` +
+                    `👥 Всего игроков: ${players.length}`;
+                  
+                  if (errors.length > 0 && errors.length <= 5) {
+                    resultMessage += `\n\n🔍 Примеры ошибок:\n${errors.slice(0, 5).join('\n')}`;
+                  }
+                  
+                  bot.editMessageCaption(resultMessage, {
+                    chat_id: chatId,
+                    message_id: messageId,
+                    parse_mode: 'Markdown',
+                    reply_markup: {
+                      inline_keyboard: [
+                        [{ text: '🔙 Назад в админ-панель', callback_data: 'admin_back' }]
+                      ]
+                    }
+                  });
+                }, 3000);
+              }
+            });
+          }, index * 200);
+        });
+      });
+      break;
+      
+    case 'edit_broadcast_photo':
+      if (query.from.username !== config.ADMIN_USERNAME) {
+        return bot.answerCallbackQuery(query.id, { text: '❌ Нет прав', show_alert: true });
+      }
+      
+      adminState.set(userId, { action: 'awaiting_broadcast_message' });
+      
+      bot.editMessageCaption(
+        `📢 *Глобальное сообщение*\n\n` +
+        `Отправьте новое фото с подписью или введите текстовое сообщение.\n` +
+        `Сообщение будет отправлено ВСЕМ игрокам без каких-либо надписей.`,
+        {
+          chat_id: chatId,
+          message_id: messageId,
           parse_mode: 'Markdown',
           reply_markup: {
             inline_keyboard: [
@@ -5824,7 +6451,25 @@ bot.on('callback_query', async (query) => {
           
           message += `${index + 1}. ${rarityIcon} *${race.name}*\n`;
           message += `   ${rarityName} | ⚡${race.base_power} | ❤️${race.base_hp}\n`;
-          message += `   🗡️${race.base_attack} | 🛡️${race.base_defense}\n\n`;
+          message += `   🗡️${race.base_attack} | 🛡️${race.base_defense}`;
+          
+          // Добавляем новые характеристики если они есть
+          if (race.base_speed !== undefined && race.base_speed !== null) {
+            message += ` | ⚡${race.base_speed}`;
+          }
+          if (race.element) {
+            const elementEmoji = {
+              'fire': '🔥', 'water': '💧', 'earth': '🌍', 'air': '💨',
+              'light': '✨', 'dark': '🌑', 'ice': '❄️', 'lightning': '⚡',
+              'nature': '🌿', 'metal': '⚙️'
+            };
+            message += ` | ${elementEmoji[race.element] || '⭐'}`;
+          }
+          if (race.base_dodge !== undefined && race.base_dodge !== null) {
+            message += ` | 🎯${race.base_dodge}%`;
+          }
+          
+          message += `\n\n`;
           
           if (index < 10) { // Показываем кнопки только для первых 10 рас
             buttons.push([{ 
@@ -6577,6 +7222,7 @@ bot.on('callback_query', async (query) => {
                     [{ text: '📦 Все предметы', callback_data: 'all_items' }],
                     [{ text: '🧪 Зелья', callback_data: 'potions_inventory' }],
                     [{ text: '🤖 Автопродажа', callback_data: 'auto_sell_menu' }],
+                    [{ text: '❓ Справка', callback_data: 'inventory_help' }],
                     [{ text: '🔙 Назад', callback_data: 'main_menu' }]
                   ];
                   
@@ -6591,6 +7237,7 @@ bot.on('callback_query', async (query) => {
                   [{ text: '📦 Все предметы', callback_data: 'all_items' }],
                   [{ text: '🧪 Зелья', callback_data: 'potions_inventory' }],
                   [{ text: '🤖 Автопродажа', callback_data: 'auto_sell_menu' }],
+                  [{ text: '❓ Справка', callback_data: 'inventory_help' }],
                   [{ text: '🔙 Назад', callback_data: 'main_menu' }]
                 ];
                 
@@ -6606,6 +7253,7 @@ bot.on('callback_query', async (query) => {
               [{ text: '📦 Все предметы', callback_data: 'all_items' }],
               [{ text: '🧪 Зелья', callback_data: 'potions_inventory' }],
               [{ text: '🤖 Автопродажа', callback_data: 'auto_sell_menu' }],
+              [{ text: '❓ Справка', callback_data: 'inventory_help' }],
               [{ text: '🔙 Назад', callback_data: 'main_menu' }]
             ];
             
@@ -6715,55 +7363,134 @@ bot.on('callback_query', async (query) => {
       break;
       
     case 'all_items':
-      db.all(`SELECT inv.id as inv_id, inv.equipped, i.* FROM inventory inv
-              JOIN items i ON inv.item_id = i.id
-              WHERE inv.player_id = ?
-              ORDER BY i.slot, i.rarity DESC`, [userId], (err, items) => {
-        if (err || items.length === 0) {
-          return safeEditMessageText(chatId, messageId, '📦 Инвентарь пуст', {
-            ...getMainMenu(true)
+      // Получаем параметры из callback_data (фильтр и страница)
+      const params = data.split('_');
+      const filterSlot = params[2] || 'all'; // all, helmet, chest, etc.
+      const page = parseInt(params[3]) || 0;
+      const itemsPerPage = 5;
+      
+      // Строим запрос с фильтром
+      let query = `SELECT inv.id as inv_id, inv.equipped, i.* FROM inventory inv
+                   JOIN items i ON inv.item_id = i.id
+                   WHERE inv.player_id = ?`;
+      
+      if (filterSlot !== 'all') {
+        query += ` AND i.slot = '${filterSlot}'`;
+      }
+      
+      query += ` ORDER BY i.rarity DESC, i.name ASC`;
+      
+      db.all(query, [userId], (err, items) => {
+        if (err) {
+          console.error('Ошибка загрузки инвентаря:', err);
+          return safeEditMessageText(chatId, messageId, '❌ Ошибка загрузки инвентаря', {
+            reply_markup: {
+              inline_keyboard: [[{ text: '🔙 К экипировке', callback_data: 'inventory' }]]
+            }
           });
         }
         
-        let message = '📦 *Все предметы*\n\n';
+        if (items.length === 0) {
+          return safeEditMessageText(chatId, messageId, 
+            `📦 *Инвентарь пуст*\n\n` +
+            `У вас пока нет предметов.\n` +
+            `Побеждайте врагов, чтобы получить добычу!`, {
+            parse_mode: 'Markdown',
+            reply_markup: {
+              inline_keyboard: [[{ text: '🔙 К экипировке', callback_data: 'inventory' }]]
+            }
+          });
+        }
+        
+        // Подсчитываем статистику по редкости
+        const rarityCount = {};
+        items.forEach(item => {
+          rarityCount[item.rarity] = (rarityCount[item.rarity] || 0) + 1;
+        });
+        
+        // Пагинация
+        const totalPages = Math.ceil(items.length / itemsPerPage);
+        const startIndex = page * itemsPerPage;
+        const endIndex = Math.min(startIndex + itemsPerPage, items.length);
+        const pageItems = items.slice(startIndex, endIndex);
+        
+        // Формируем сообщение
+        const slotNames = {
+          helmet: '🪖 Шлем', chest: '🛡️ Нагрудник', legs: '👖 Поножи', boots: '👢 Сапоги',
+          weapon: '⚔️ Оружие', shield: '🛡️ Щит', artifact_1: '💎 Артефакт', 
+          artifact_2: '� Руна', accessory: '🎒 Аксессуар'
+        };
+        
+        let message = `📦 *Инвентарь* (${items.length} предметов)\n\n`;
+        
+        // Статистика по редкости
+        message += `📊 *По редкости:*\n`;
+        const rarities = ['COMMON', 'RARE', 'EPIC', 'MYTHIC', 'LEGENDARY'];
+        rarities.forEach(rarity => {
+          if (rarityCount[rarity]) {
+            const rarityIcon = config.RARITY[rarity].color;
+            message += `${rarityIcon} ${config.RARITY[rarity].name}: ${rarityCount[rarity]} шт\n`;
+          }
+        });
+        
+        message += `\n📄 Страница ${page + 1}/${totalPages}\n\n`;
+        
+        // Показываем предметы на текущей странице
+        pageItems.forEach((item, index) => {
+          const rarityIcon = config.RARITY[item.rarity].color;
+          const equipped = item.equipped ? '✅ ' : '';
+          const slotIcon = slotNames[item.slot] || item.slot;
+          const itemStats = formatItemStats(item);
+          
+          message += `${equipped}${rarityIcon} *${item.name}*\n`;
+          message += `├ ${slotIcon}\n`;
+          message += `└ ${itemStats}\n\n`;
+        });
+        
+        // Кнопки управления
         const buttons = [];
         
-        // Группируем по слотам
-        const itemsBySlot = {};
-        items.forEach(item => {
-          if (!itemsBySlot[item.slot]) itemsBySlot[item.slot] = [];
-          itemsBySlot[item.slot].push(item);
+        // Кнопки предметов
+        pageItems.forEach(item => {
+          const rarityIcon = config.RARITY[item.rarity].color;
+          const equipped = item.equipped ? '✅' : '⚪';
+          buttons.push([{
+            text: `${equipped} ${rarityIcon} ${item.name}`,
+            callback_data: `item_detail_${item.inv_id}_${filterSlot}_${page}`
+          }]);
         });
         
-        Object.entries(itemsBySlot).forEach(([slot, slotItems]) => {
-          const slotNames = {
-            helmet: '🪖 Шлемы',
-            chest: '🛡️ Нагрудники',
-            legs: '👖 Поножи', 
-            boots: '👢 Сапоги',
-            weapon: '⚔️ Оружие',
-            shield: '🛡️ Щиты',
-            artifact_1: '💎 Артефакты',
-            artifact_2: '� Руны',
-            accessory: '🎒 Аксессуары'
-          };
-          
-          message += `*${slotNames[slot] || slot}:*\n`;
-          
-          slotItems.slice(0, 3).forEach(item => {
-            const rarityIcon = config.RARITY[item.rarity].color;
-            const equipped = item.equipped ? '✅' : '';
-            const itemStats = formatItemStats(item);
-            message += `${equipped}${rarityIcon} ${item.name}${itemStats}\n`;
-            
-            buttons.push([{
-              text: `${equipped}${item.name}`,
-              callback_data: `equip_${item.inv_id}`
-            }]);
-          });
-          
-          message += '\n';
-        });
+        // Навигация по страницам
+        if (totalPages > 1) {
+          const navButtons = [];
+          if (page > 0) {
+            navButtons.push({ text: '◀️ Назад', callback_data: `all_items_${filterSlot}_${page - 1}` });
+          }
+          navButtons.push({ text: `${page + 1}/${totalPages}`, callback_data: 'noop' });
+          if (page < totalPages - 1) {
+            navButtons.push({ text: 'Вперёд ▶️', callback_data: `all_items_${filterSlot}_${page + 1}` });
+          }
+          buttons.push(navButtons);
+        }
+        
+        // Фильтры по слотам
+        buttons.push([
+          { text: filterSlot === 'all' ? '✅ Все' : 'Все', callback_data: 'all_items_all_0' },
+          { text: filterSlot === 'weapon' ? '✅ ⚔️' : '⚔️', callback_data: 'all_items_weapon_0' },
+          { text: filterSlot === 'helmet' ? '✅ 🪖' : '🪖', callback_data: 'all_items_helmet_0' }
+        ]);
+        
+        buttons.push([
+          { text: filterSlot === 'chest' ? '✅ 🛡️' : '🛡️', callback_data: 'all_items_chest_0' },
+          { text: filterSlot === 'legs' ? '✅ 👖' : '👖', callback_data: 'all_items_legs_0' },
+          { text: filterSlot === 'boots' ? '✅ 👢' : '👢', callback_data: 'all_items_boots_0' }
+        ]);
+        
+        buttons.push([
+          { text: filterSlot === 'artifact_1' ? '✅ 💎' : '💎', callback_data: 'all_items_artifact_1_0' },
+          { text: filterSlot === 'artifact_2' ? '✅ �' : '�', callback_data: 'all_items_artifact_2_0' },
+          { text: filterSlot === 'accessory' ? '✅ 🎒' : '🎒', callback_data: 'all_items_accessory_0' }
+        ]);
         
         buttons.push([{ text: '🔙 К экипировке', callback_data: 'inventory' }]);
         
@@ -6772,6 +7499,107 @@ bot.on('callback_query', async (query) => {
           reply_markup: { inline_keyboard: buttons }
         });
       });
+      break;
+      
+    // Детальный просмотр предмета
+    case 'item_detail':
+      const detailParams = data.split('_');
+      const invId = parseInt(detailParams[2]);
+      const returnFilter = detailParams[3] || 'all';
+      const returnPage = parseInt(detailParams[4]) || 0;
+      
+      db.get(`SELECT inv.id as inv_id, inv.equipped, i.* FROM inventory inv
+              JOIN items i ON inv.item_id = i.id
+              WHERE inv.id = ? AND inv.player_id = ?`, [invId, userId], (err, item) => {
+        
+        if (err || !item) {
+          return bot.answerCallbackQuery(query.id, { text: '❌ Предмет не найден' });
+        }
+        
+        const rarityIcon = config.RARITY[item.rarity].color;
+        const rarityName = config.RARITY[item.rarity].name;
+        const slotNames = {
+          helmet: '🪖 Шлем', chest: '🛡️ Нагрудник', legs: '👖 Поножи', boots: '👢 Сапоги',
+          weapon: '⚔️ Оружие', shield: '🛡️ Щит', artifact_1: '💎 Артефакт', 
+          artifact_2: '� Руна', accessory: '🎒 Аксессуар'
+        };
+        
+        let message = `${rarityIcon} *${item.name}*\n\n`;
+        message += `📝 ${item.description}\n\n`;
+        message += `⭐ Редкость: ${rarityName}\n`;
+        message += `🎯 Слот: ${slotNames[item.slot]}\n`;
+        message += `${item.equipped ? '✅ Экипирован' : '⚪ Не экипирован'}\n\n`;
+        
+        message += `📊 *Характеристики:*\n`;
+        if (item.power_bonus > 0) message += `⚡ Сила: +${smartFormat(item.power_bonus)}\n`;
+        if (item.hp_bonus > 0) message += `❤️ HP: +${smartFormat(item.hp_bonus)}\n`;
+        if (item.attack_bonus > 0) message += `⚔️ Атака: +${smartFormat(item.attack_bonus)}\n`;
+        if (item.defense_bonus > 0) message += `🛡️ Защита: +${smartFormat(item.defense_bonus)}\n`;
+        
+        if (item.special_effect) {
+          message += `\n✨ *Особый эффект:*\n${item.special_effect}`;
+        }
+        
+        const buttons = [];
+        
+        // Кнопка экипировки/снятия
+        if (item.equipped) {
+          buttons.push([{ text: '⚪ Снять', callback_data: `unequip_${invId}_${returnFilter}_${returnPage}` }]);
+        } else {
+          buttons.push([{ text: '✅ Экипировать', callback_data: `equip_${invId}_${returnFilter}_${returnPage}` }]);
+        }
+        
+        // Кнопка продажи
+        const sellPrice = Math.floor(config.RARITY[item.rarity].sell_price || 100);
+        buttons.push([{ text: `💰 Продать (${sellPrice}💰)`, callback_data: `sell_item_${invId}_${returnFilter}_${returnPage}` }]);
+        
+        // Кнопка возврата
+        buttons.push([{ text: '🔙 К списку', callback_data: `all_items_${returnFilter}_${returnPage}` }]);
+        
+        safeEditMessageText(chatId, messageId, message, {
+          parse_mode: 'Markdown',
+          reply_markup: { inline_keyboard: buttons }
+        });
+      });
+      break;
+      
+    case 'inventory_help':
+      safeEditMessageText(chatId, messageId,
+        `📚 *Справка по инвентарю*\n\n` +
+        `🎒 *Экипировка*\n` +
+        `9 слотов для предметов:\n` +
+        `🪖 Шлем, 🛡️ Нагрудник, 👖 Поножи, 👢 Сапоги\n` +
+        `⚔️ Оружие, 🛡️ Щит, 💎 Артефакт, � Руна, 🎒 Аксессуар\n\n` +
+        `📦 *Все предметы*\n` +
+        `• Фильтры по типу (нажмите на иконку)\n` +
+        `• Пагинация (5 предметов на странице)\n` +
+        `• Статистика по редкости\n` +
+        `• ✅ = экипирован, ⚪ = не экипирован\n\n` +
+        `🔍 *Детальный просмотр*\n` +
+        `Нажмите на предмет чтобы:\n` +
+        `• Посмотреть все характеристики\n` +
+        `• Экипировать/снять\n` +
+        `• Продать за золото\n\n` +
+        `⭐ *Редкость предметов*\n` +
+        `⚪ Обычный → 🔵 Редкий → 🟣 Эпический\n` +
+        `→ 🟠 Мифический → 🟡 Легендарный\n\n` +
+        `💡 *Советы*\n` +
+        `• Экипируйте лучшие предметы\n` +
+        `• Продавайте ненужное\n` +
+        `• Используйте фильтры для поиска\n` +
+        `• Настройте автопродажу\n\n` +
+        `🤖 *Автопродажа*\n` +
+        `Автоматически продает новые предметы\n` +
+        `выбранной редкости. Настройте под себя!`,
+        {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '🔙 К инвентарю', callback_data: 'inventory' }]
+            ]
+          }
+        }
+      );
       break;
       
     case 'duel':
@@ -7567,14 +8395,8 @@ bot.on('callback_query', async (query) => {
           [now, goldEarned, expEarned, userId], () => {
             let workMessage = `💼 Работа выполнена!\n\n` +
               `💰 Заработано: ${goldEarned} золота\n` +
-              `✨ Получено: ${expEarned} опыта\n`;
-            
-            // Показываем множитель если есть пробуждение
-            if (player.awakening_level > 0) {
-              workMessage += `🌟 Бонус пробуждения: x${awakeningBonus.multiplier.toFixed(1)}\n`;
-            }
-            
-            workMessage += `\n⏰ Следующая работа через: ${formatCooldown(config.WORK_COOLDOWN)}`;
+              `✨ Получено: ${expEarned} опыта\n` +
+              `\n⏰ Следующая работа через: ${formatCooldown(config.WORK_COOLDOWN)}`;
             
             bot.sendMessage(userId, workMessage, getMainMenu(true)
             );
@@ -7670,14 +8492,8 @@ bot.on('callback_query', async (query) => {
           [now, goldReward, expReward, userId], () => {
             let rewardMessage = `🎁 Ежедневная награда!\n\n` +
               `💰 +${goldReward} золота\n` +
-              `✨ +${expReward} опыта\n`;
-            
-            // Показываем множитель если есть пробуждение
-            if (player.awakening_level > 0) {
-              rewardMessage += `🌟 Бонус пробуждения: x${awakeningBonus.multiplier.toFixed(1)}\n`;
-            }
-            
-            rewardMessage += `\n⏰ Следующая награда через: 24 часа`;
+              `✨ +${expReward} опыта\n` +
+              `\n⏰ Следующая награда через: 24 часа`;
             
             bot.sendMessage(userId, rewardMessage, getMainMenu(true));
             
@@ -8638,21 +9454,36 @@ bot.on('callback_query', async (query) => {
       
       if (data.startsWith('attack_raid_')) {
         const raidId = parseInt(data.replace('attack_raid_', ''));
+        console.log(`⚔️ attack_raid обработчик: raidId=${raidId}, userId=${userId}`);
         
         getOrCreatePlayer(userId, query.from.username, (err, player) => {
           if (err) {
+            console.error('❌ Ошибка получения игрока:', err);
             return bot.answerCallbackQuery(query.id, { text: '❌ Ошибка', show_alert: true });
           }
           
+          console.log(`✅ Игрок получен: ${player.username}`);
+          
           duels.calculatePlayerPower(userId, (err, stats) => {
             if (err || !stats) {
+              console.error('❌ Ошибка расчета силы:', err);
               return bot.answerCallbackQuery(query.id, { text: '❌ Ошибка расчета силы', show_alert: true });
             }
             
+            console.log(`✅ Статистика получена: attack=${stats.attack}`);
+            
             // Используем урон игрока (attack), а не силу (power)
             raids.attackBoss(raidId, userId, stats.attack, (err, result) => {
+              console.log(`📊 Результат attackBoss: err=${err ? err.message : 'null'}, result=${result ? 'ok' : 'null'}`);
               if (err) {
                 return bot.answerCallbackQuery(query.id, { text: `❌ ${err.message}`, show_alert: true });
+              }
+              
+              if (result.isStunned) {
+                return bot.answerCallbackQuery(query.id, { 
+                  text: `😵 Вы оглушены! Не можете атаковать (${result.stunTimeLeft}с)`, 
+                  show_alert: true 
+                });
               }
               
               if (result.bossDefeated) {
@@ -8707,13 +9538,43 @@ bot.on('callback_query', async (query) => {
                   bot.emit('callback_query', { ...query, data: 'select_raid_boss' });
                 }, 2000);
               } else {
+                let alertText = `⚔️ Урон: ${result.damage}\n❤️ HP босса: ${result.currentHp.toLocaleString()}/${result.maxHp.toLocaleString()}`;
+                
+                // Если была активирована способность расы
+                if (result.abilityMessage) {
+                  alertText += `\n\n${result.abilityMessage}`;
+                }
+                
+                // Если кто-то был оглушен, добавляем сообщение
+                if (result.stunned_player_id) {
+                  const stunPlayerName = result.stunned_player_name || `Игрок ${result.stunned_player_id}`;
+                  alertText += `\n\n🌪️ Абаддон оглушил ${stunPlayerName}!`;
+                  
+                  // Отправляем сообщение в чат рейда
+                  raids.getActiveRaidForBoss('Абаддон', (err, raid) => {
+                    if (raid) {
+                      db.all(`SELECT user_id FROM raid_participants WHERE raid_id = ?`, [raid.id], (err, participants) => {
+                        if (participants) {
+                          participants.forEach(p => {
+                            bot.sendMessage(p.user_id, `🌪️ Абаддон оглушил ${stunPlayerName} на 5 секунд!`, { parse_mode: 'Markdown' }).catch(err => {
+                              console.log(`Не удалось отправить сообщение об оглушении игроку ${p.user_id}`);
+                            });
+                          });
+                        }
+                      });
+                    }
+                  });
+                }
+                
                 bot.answerCallbackQuery(query.id, { 
-                  text: `⚔️ Урон: ${result.damage}\n❤️ HP босса: ${result.currentHp.toLocaleString()}/${result.maxHp.toLocaleString()}`, 
+                  text: alertText, 
                   show_alert: false 
                 });
                 
-                // Обновляем меню битвы с боссом
-                showRaidBattleMenu(chatId, messageId, raidId, userId);
+                // Отправляем новое сообщение с обновленным меню боя (вместо редактирования)
+                setTimeout(() => {
+                  showRaidBattleMenu(chatId, null, raidId, userId);
+                }, 500);
               }
             });
           });
@@ -9287,80 +10148,102 @@ bot.on('callback_query', async (query) => {
       }
       
       // Обработка экипировки предметов
-      if (data.startsWith('equip_')) {
-        const inventoryId = parseInt(data.split('_')[1]);
+      if (data.startsWith('equip_') && !data.startsWith('equip_potion_')) {
+        const params = data.split('_');
+        const inventoryId = parseInt(params[1]);
+        const returnFilter = params[2] || 'all';
+        const returnPage = parseInt(params[3]) || 0;
         
-        // Получаем детальную информацию о предмете
+        // Экипируем предмет
+        items.equipItem(userId, inventoryId, (err) => {
+          if (err) {
+            return bot.answerCallbackQuery(query.id, { text: `❌ ${err.message}`, show_alert: true });
+          }
+          
+          bot.answerCallbackQuery(query.id, { text: '✅ Предмет экипирован!' });
+          
+          // Возвращаемся к детальному просмотру
+          bot.emit('callback_query', { 
+            ...query, 
+            data: `item_detail_${inventoryId}_${returnFilter}_${returnPage}` 
+          });
+        });
+        return;
+      }
+      
+      // Обработка снятия предметов
+      if (data.startsWith('unequip_')) {
+        const params = data.split('_');
+        const inventoryId = parseInt(params[1]);
+        const returnFilter = params[2] || 'all';
+        const returnPage = parseInt(params[3]) || 0;
+        
+        // Снимаем предмет
+        db.run(`UPDATE inventory SET equipped = 0 WHERE id = ? AND player_id = ?`, 
+          [inventoryId, userId], (err) => {
+            if (err) {
+              return bot.answerCallbackQuery(query.id, { text: '❌ Ошибка снятия предмета', show_alert: true });
+            }
+            
+            bot.answerCallbackQuery(query.id, { text: '⚪ Предмет снят!' });
+            
+            // Возвращаемся к детальному просмотру
+            bot.emit('callback_query', { 
+              ...query, 
+              data: `item_detail_${inventoryId}_${returnFilter}_${returnPage}` 
+            });
+          });
+        return;
+      }
+      
+      // Обработка продажи предметов
+      if (data.startsWith('sell_item_')) {
+        const params = data.split('_');
+        const inventoryId = parseInt(params[2]);
+        const returnFilter = params[3] || 'all';
+        const returnPage = parseInt(params[4]) || 0;
+        
+        // Получаем информацию о предмете
         db.get(`SELECT inv.id as inv_id, inv.equipped, i.* FROM inventory inv
                 JOIN items i ON inv.item_id = i.id
                 WHERE inv.id = ? AND inv.player_id = ?`, [inventoryId, userId], (err, item) => {
+          
           if (err || !item) {
-            return bot.answerCallbackQuery(query.id, { text: '❌ Предмет не найден' });
+            return bot.answerCallbackQuery(query.id, { text: '❌ Предмет не найден', show_alert: true });
           }
           
-          const rarityConfig = config.RARITY[item.rarity];
-          const rarityIcon = rarityConfig ? rarityConfig.color : '⚪️';
-          const rarityName = rarityConfig ? rarityConfig.name : 'Обычный';
-          const equipped = item.equipped ? '✅ Экипирован' : '⚪️ Не экипирован';
-          
-          const slotNames = {
-            helmet: '🪖 Шлем',
-            chest: '🛡️ Нагрудник',
-            legs: '👖 Поножи',
-            boots: '👢 Сапоги',
-            weapon: '⚔️ Оружие',
-            shield: '🛡️ Щит',
-            artifact_1: '💎 Артефакт',
-            artifact_2: '� Руна',
-            accessory: '🎒 Аксессуар'
-          };
-          
-          let message = `📋 *Информация о предмете*\n\n`;
-          message += `${rarityIcon} *${item.name}*\n`;
-          message += `${rarityName} ${slotNames[item.slot] || item.slot}\n`;
-          message += `${equipped}\n\n`;
-          
-          if (item.description) {
-            message += `📝 ${item.description}\n\n`;
+          if (item.equipped) {
+            return bot.answerCallbackQuery(query.id, { text: '❌ Сначала снимите предмет!', show_alert: true });
           }
           
-          message += `⚡ Характеристики:\n`;
-          if (item.power_bonus > 0) message += `⚡ Сила: +${item.power_bonus}\n`;
-          if (item.hp_bonus > 0) message += `❤️ Здоровье: +${item.hp_bonus}\n`;
-          if (item.attack_bonus > 0) message += `🗡️ Атака: +${item.attack_bonus}\n`;
-          if (item.defense_bonus > 0) message += `🛡️ Защита: +${item.defense_bonus}\n`;
+          // Рассчитываем цену продажи
+          const sellPrice = Math.floor(config.RARITY[item.rarity].sell_price || 100);
           
-          if (item.special_effect) {
-            message += `\n✨ Особый эффект: ${item.special_effect}`;
-          }
-          
-          // Рассчитываем цену продажи (50% от базовой стоимости по редкости)
-          const rarityPrices = {
-            'COMMON': 50,
-            'RARE': 150,
-            'EPIC': 400,
-            'MYTHIC': 1000,
-            'LEGENDARY': 2500,
-            'SECRET': 5000
-          };
-          const sellPrice = Math.floor((rarityPrices[item.rarity] || 50) * 0.5);
-          
-          const buttons = [];
-          
-          if (!item.equipped) {
-            buttons.push([{ text: '✅ Экипировать', callback_data: `do_equip_${inventoryId}` }]);
-          } else {
-            buttons.push([{ text: '❌ Снять', callback_data: `unequip_${inventoryId}` }]);
-          }
-          
-          buttons.push([{ text: `💰 Продать за ${sellPrice} золота`, callback_data: `sell_item_${inventoryId}` }]);
-          buttons.push([{ text: '🔙 К предметам', callback_data: 'all_items' }]);
-          
-          safeEditMessageText(chatId, messageId, message, {
-            parse_mode: 'Markdown',
-            reply_markup: { inline_keyboard: buttons }
+          // Удаляем предмет и добавляем золото
+          db.run(`DELETE FROM inventory WHERE id = ?`, [inventoryId], (err) => {
+            if (err) {
+              return bot.answerCallbackQuery(query.id, { text: '❌ Ошибка продажи', show_alert: true });
+            }
+            
+            db.run(`UPDATE players SET gold = gold + ? WHERE user_id = ?`, [sellPrice, userId], (err) => {
+              if (err) {
+                console.error('Ошибка добавления золота:', err);
+              }
+              
+              bot.answerCallbackQuery(query.id, { 
+                text: `✅ Продано за ${sellPrice}💰!`, 
+                show_alert: true 
+              });
+              
+              // Возвращаемся к списку предметов
+              bot.emit('callback_query', { 
+                ...query, 
+                data: `all_items_${returnFilter}_${returnPage}` 
+              });
+            });
           });
         });
+        return;
       }
       
       // Обработка экипировки предмета (подтверждение)
@@ -10378,5 +11261,145 @@ bot.onText(/\/testreferral/, async (msg) => {
   });
 });
 
-// Экспортируем бота для использования в других модулях
+// Экспортируем бота для использования в других модулей
 module.exports = { bot };
+
+// ========================================
+// TELEGRAM STARS — обработка платежей
+// ========================================
+
+// Автоподтверждение всех инвойсов
+bot.on('pre_checkout_query', (query) => {
+  bot.answerPreCheckoutQuery(query.id, true).catch(err => {
+    console.error('Ошибка answerPreCheckoutQuery:', err.message);
+  });
+});
+
+// Успешная оплата — выдаём товар
+bot.on('message', (msg) => {
+  if (!msg.successful_payment) return;
+
+  const userId   = msg.from.id;
+  const username = msg.from.username || String(userId);
+  const payment  = msg.successful_payment;
+  const payload  = payment.invoice_payload;
+  const stars    = payment.total_amount; // в Stars (XTR 1:1)
+
+  console.log(`💳 Оплата: userId=${userId}, payload=${payload}, stars=${stars}`);
+
+  // 💎 Кристаллы
+  const crystalMap = {
+    crystals_100: 100,
+    crystals_250: 250,
+    crystals_700: 700,
+  };
+
+  if (crystalMap[payload] !== undefined) {
+    const amount = crystalMap[payload];
+    db.run(`UPDATE players SET crystals = crystals + ? WHERE user_id = ?`, [amount, userId], (err) => {
+      if (err) {
+        console.error('Ошибка выдачи кристаллов:', err.message);
+        return bot.sendMessage(userId, '❌ Ошибка выдачи кристаллов. Напишите @trimetillllll');
+      }
+      bot.sendMessage(userId,
+        `✅ *Оплата прошла!*\n\n` +
+        `💎 Вам начислено *${amount} кристаллов*\n` +
+        `⭐ Потрачено: ${stars} Stars\n\n` +
+        `Удачи в Zilsor Race! 🎮`,
+        { parse_mode: 'Markdown' }
+      );
+      sendLogMessage(
+        `💳 Покупка кристаллов\n👤 @${username} (${userId})\n💎 +${amount} кристаллов\n⭐ ${stars} Stars`,
+        'VIP'
+      );
+    });
+    return;
+  }
+
+  // 👑 VIP
+  if (payload === 'vip_30') {
+    db.get(`SELECT vip_until, is_vip FROM players WHERE user_id = ?`, [userId], (err, player) => {
+      if (err || !player) return bot.sendMessage(userId, '❌ Ошибка. Напишите @trimetillllll');
+
+      // Если VIP ещё активен — продлеваем, иначе считаем с сейчас
+      const now = Math.floor(Date.now() / 1000);
+      const base = (player.is_vip && player.vip_until > now) ? player.vip_until : now;
+      const newVipUntil = base + 30 * 86400;
+
+      db.run(`UPDATE players SET is_vip = 1, vip_until = ? WHERE user_id = ?`, [newVipUntil, userId], (err) => {
+        if (err) {
+          console.error('Ошибка выдачи VIP:', err.message);
+          return bot.sendMessage(userId, '❌ Ошибка выдачи VIP. Напишите @trimetillllll');
+        }
+        const until = new Date(newVipUntil * 1000).toLocaleDateString('ru-RU');
+        bot.sendMessage(userId,
+          `✅ *VIP активирован!*\n\n` +
+          `👑 VIP статус до *${until}*\n` +
+          `⭐ Потрачено: ${stars} Stars\n\n` +
+          `Привилегии:\n` +
+          `• 5 ежедневных квестов\n` +
+          `• Создание клана\n` +
+          `• Иконка 💎 в рейтинге`,
+          { parse_mode: 'Markdown' }
+        );
+        sendLogMessage(
+          `💳 Покупка VIP\n👤 @${username} (${userId})\n👑 VIP до ${until}\n⭐ ${stars} Stars`,
+          'VIP'
+        );
+      });
+    });
+    return;
+  }
+
+  // ⏰ Сброс кулдаунов
+  if (payload === 'reset_cooldowns') {
+    const now = Math.floor(Date.now() / 1000);
+    db.run(
+      `UPDATE players SET
+         last_loot_time      = 0,
+         last_work_time      = 0,
+         last_duel_time      = 0,
+         last_daily_reward   = 0
+       WHERE user_id = ?`,
+      [userId], (err) => {
+        if (err) {
+          console.error('Ошибка сброса КД:', err.message);
+          return bot.sendMessage(userId, '❌ Ошибка сброса. Напишите @trimetillllll');
+        }
+        bot.sendMessage(userId,
+          `✅ *Кулдауны сброшены!*\n\n` +
+          `⏰ Все кулдауны обнулены\n` +
+          `⭐ Потрачено: ${stars} Stars\n\n` +
+          `Теперь можно:\n` +
+          `🌲 Идти в лес\n` +
+          `💼 Работать\n` +
+          `⚔️ Дуэлиться\n` +
+          `🎁 Забрать ежедневную награду`,
+          { parse_mode: 'Markdown' }
+        );
+        sendLogMessage(
+          `💳 Сброс кулдаунов\n👤 @${username} (${userId})\n⭐ ${stars} Stars`,
+          'VIP'
+        );
+      }
+    );
+    return;
+  }
+
+  // Неизвестный payload
+  console.warn(`⚠️ Неизвестный payload: ${payload}, userId=${userId}`);
+  bot.sendMessage(userId, '⚠️ Платёж получен, но товар не распознан. Напишите @trimetillllll');
+});
+
+// ========================================
+// Запуск бота приключений (Zilsor Adventure)
+// ========================================
+setTimeout(() => {
+  console.log('\n🎮 Запуск бота приключений (Zilsor Adventure)...\n');
+  try {
+    require('./zilsor-adventure/bot.js');
+    console.log('✅ Бот приключений запущен успешно!\n');
+  } catch (error) {
+    console.error('❌ Ошибка запуска бота приключений:', error.message);
+  }
+}, 3000);

@@ -25,7 +25,7 @@ const BASE_RACES = [
   { name: 'Оборотень', description: 'Дети луны', rarity: 'EPIC', base_power: 240, base_hp: 160, base_attack: 70, base_defense: 25, special_ability: 'Звериная ярость: +30% урона при низком HP', is_legendary: 0 },
   
   // Мистические расы
-  { name: 'Феникс', description: 'Бессмертная огненная птица', rarity: 'MYTHIC', base_power: 300, base_hp: 200, base_attack: 80, base_defense: 60, special_ability: 'Возрождение: +50% к восстановлению HP', is_legendary: 0 },
+  { name: 'Феникс', description: 'Бессмертная огненная птица', rarity: 'MYTHIC', base_power: 300, base_hp: 200, base_attack: 80, base_defense: 60, special_ability: 'Возрождение: Воскрешение с 50% HP (1 раз за бой)', is_legendary: 0 },
   { name: 'Вампир', description: 'Повелители ночи', rarity: 'MYTHIC', base_power: 280, base_hp: 180, base_attack: 85, base_defense: 55, special_ability: 'Кровопийство: +15% к атаке и HP', is_legendary: 0 },
   { name: 'Дракон', description: 'Древние повелители магии', rarity: 'MYTHIC', base_power: 350, base_hp: 250, base_attack: 90, base_defense: 70, special_ability: 'Драконья мощь: +40% ко всем характеристикам', is_legendary: 0 },
   { name: 'Лич', description: 'Бессмертный некромант', rarity: 'MYTHIC', base_power: 320, base_hp: 180, base_attack: 95, base_defense: 65, special_ability: 'Темная магия: +35% к магическому урону', is_legendary: 0 },

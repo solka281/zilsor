@@ -1,5 +1,10 @@
 module.exports = {
-  BOT_TOKEN: process.env.BOT_TOKEN || '8609569802:AAFUVzdCvy3haqeRHOnXcsJ8zJHXsNjS1GA',
+  BOT_TOKEN: process.env.BOT_TOKEN,
+  
+  // URL сервера (Railway автоматически задает RAILWAY_PUBLIC_DOMAIN)
+  SERVER_URL: process.env.RAILWAY_PUBLIC_DOMAIN
+    ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
+    : (process.env.SERVER_URL || 'http://localhost:8080'),
   
   // Прокси настройки (раскомментируйте и настройте при необходимости)
   // PROXY: {

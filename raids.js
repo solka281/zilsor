@@ -171,6 +171,49 @@ function initializeRaids() {
     });
   });
   
+  // Добавляем Абаддона если его нет
+  db.get(`SELECT * FROM raid_bosses WHERE name = 'Абаддон'`, (err, abaddon) => {
+    if (err) {
+      console.error('Ошибка проверки Абаддона:', err);
+      return;
+    }
+    
+    const requirements = JSON.stringify({
+      required_raid_participation: 'Владыка тьмы'
+    });
+    
+    const specialRewards = JSON.stringify({
+      top_1_guaranteed_item: 'Латные доспехи'
+    });
+    
+    if (!abaddon) {
+      console.log('Создаем Абаддона...');
+      db.run(`INSERT INTO raid_bosses (name, level, base_hp, image, description, rewards, cooldown_hours, requirements, special_rewards)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ['Абаддон', 3, 300000, 'abaddon.jpg', 
+         'Повелитель ада и разрушения. Обладает способностью оглушать противников.',
+         JSON.stringify({ total_gold: 10000, total_crystals: 70, total_exp: 13000 }),
+         10, requirements, specialRewards],
+        (insertErr) => {
+          if (insertErr) {
+            console.error('Ошибка создания Абаддона:', insertErr);
+          } else {
+            console.log('✅ Абаддон создан');
+          }
+        });
+    } else {
+      // Обновляем существующего Абаддона (убираем 15 уровень, ставим кд 10 часов)
+      db.run(`UPDATE raid_bosses SET cooldown_hours = 10, requirements = ? WHERE name = 'Абаддон'`,
+        [requirements], (err) => {
+          if (err) {
+            console.error('Ошибка обновления Абаддона:', err);
+          } else {
+            console.log('✅ Абаддон обновлен: кд=10ч, условие=победить Владыку тьмы');
+          }
+        });
+    }
+  });
+  
   // Сначала создаем правильную структуру таблицы active_raids
   createActiveRaidsTable();
   
@@ -370,6 +413,18 @@ function createOtherRaidTables() {
     completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`, (err) => {
     if (err) console.error('Ошибка создания таблицы raid_history:', err);
+  });
+  
+  // Таблица для отслеживания оглушенных игроков в рейдах
+  db.run(`CREATE TABLE IF NOT EXISTS raid_stunned_players (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    raid_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    stunned_until TIMESTAMP NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (raid_id) REFERENCES active_raids(id)
+  )`, (err) => {
+    if (err) console.error('Ошибка создания таблицы raid_stunned_players:', err);
     else console.log('✅ Система рейдов инициализирована');
   });
 }
@@ -873,51 +928,216 @@ function attackBoss(raidId, playerId, playerAttack, callback) {
       return;
     }
     
-    // Рассчитываем урон (атака игрока + случайность ±20%)
-    const randomFactor = 0.8 + Math.random() * 0.4; // 0.8 - 1.2
-    const damage = Math.floor(playerAttack * randomFactor);
-    
-    // Обновляем HP босса
-    const newHp = Math.max(0, raid.current_hp - damage);
-    
-    db.run(`UPDATE active_raids SET current_hp = ? WHERE id = ?`, [newHp, raidId], (err) => {
-      if (err) return callback(err);
-      
-      // Обновляем статистику игрока (используем user_id)
-      db.run(`UPDATE raid_participants 
-              SET damage_dealt = damage_dealt + ?, 
-                  attacks_count = attacks_count + 1
-              WHERE raid_id = ? AND user_id = ?`,
-        [damage, raidId, playerId], (err) => {
-          if (err) return callback(err);
+    // Проверяем, оглушен ли игрок (для Абаддона)
+    db.get(`SELECT * FROM raid_stunned_players WHERE raid_id = ? AND user_id = ?`,
+      [raidId, playerId], (err, stun) => {
+        if (err) {
+          console.error('Ошибка проверки оглушения:', err);
+          return callback(new Error('Ошибка проверки оглушения'));
+        }
+        
+        // Проверяем, не истекло ли оглушение (на стороне JavaScript для точности)
+        if (stun) {
+          const stunUntil = new Date(stun.stunned_until);
+          const now = new Date();
           
-          console.log(`⚔️ Игрок ${playerId} нанес ${damage} урона боссу (осталось HP: ${newHp}/${raid.boss_hp})`);
+          if (now < stunUntil) {
+            // Игрок оглушен, не может атаковать
+            const stunTimeLeft = Math.ceil((stunUntil - now) / 1000);
+            console.log(`😵 Игрок ${playerId} оглушен еще на ${stunTimeLeft} секунд`);
+            return callback(null, {
+              damage: 0,
+              bossDefeated: false,
+              currentHp: raid.current_hp,
+              maxHp: raid.boss_hp,
+              isStunned: true,
+              stunTimeLeft
+            });
+          } else {
+            // Оглушение истекло, удаляем запись
+            console.log(`✅ Оглушение игрока ${playerId} истекло, удаляем`);
+            db.run(`DELETE FROM raid_stunned_players WHERE id = ?`, [stun.id], (err) => {
+              if (err) console.error('Ошибка удаления оглушения:', err);
+            });
+          }
+        }
+        
+        // Получаем информацию о расе игрока для применения способностей
+        db.get(`SELECT p.*, r.special_ability FROM players p 
+                LEFT JOIN races r ON p.race_id = r.id 
+                WHERE p.user_id = ?`, [playerId], (err, player) => {
+          if (err || !player) {
+            console.error('Ошибка получения информации о игроке:', err);
+            // Продолжаем без способностей
+            return performRaidAttack(raidId, playerId, playerAttack, raid, null, callback);
+          }
           
-          // Проверяем, побежден ли босс
-          if (newHp <= 0) {
-            completeRaid(raidId, (err, results) => {
+          performRaidAttack(raidId, playerId, playerAttack, raid, player, callback);
+        });
+      });
+  });
+}
+
+// Выполнить атаку в рейде с применением способностей
+function performRaidAttack(raidId, playerId, playerAttack, raid, player, callback) {
+  console.log(`🎯 performRaidAttack: raidId=${raidId}, playerId=${playerId}, playerAttack=${playerAttack}`);
+  
+  const raceAbilities = require('./race_abilities');
+  
+  // Рассчитываем урон (атака игрока + случайность ±20%)
+  const randomFactor = 0.8 + Math.random() * 0.4; // 0.8 - 1.2
+  let damage = Math.floor(playerAttack * randomFactor);
+  console.log(`💥 Базовый урон: ${damage}`);
+  
+  // Применяем способность расы если есть информация об игроке
+  let abilityMessage = '';
+  if (player && player.special_ability) {
+    const attackResult = {
+      damage: damage,
+      critical: false,
+      special: false,
+      specialName: '',
+      abilityMessage: ''
+    };
+    
+    const attackerForAbility = {
+      specialAbility: player.special_ability,
+      currentHP: player.hp,
+      maxHP: player.max_hp,
+      power: player.power,
+      attack: player.attack,
+      defense: player.defense
+    };
+    
+    const defenderForAbility = {
+      specialAbility: null,
+      currentHP: raid.current_hp,
+      maxHP: raid.boss_hp
+    };
+    
+    // Применяем способность расы
+    const modifiedResult = raceAbilities.applyRaceAbility(
+      attackerForAbility,
+      defenderForAbility,
+      attackResult,
+      null
+    );
+    
+    damage = modifiedResult.damage;
+    abilityMessage = modifiedResult.abilityMessage || '';
+  }
+  
+  // Обновляем HP босса
+  const newHp = Math.max(0, raid.current_hp - damage);
+  
+  db.run(`UPDATE active_raids SET current_hp = ? WHERE id = ?`, [newHp, raidId], (err) => {
+    if (err) return callback(err);
+    
+    // Обновляем статистику игрока (используем user_id)
+    db.run(`UPDATE raid_participants 
+            SET damage_dealt = damage_dealt + ?, 
+                attacks_count = attacks_count + 1
+            WHERE raid_id = ? AND user_id = ?`,
+      [damage, raidId, playerId], (err) => {
+        if (err) return callback(err);
+        
+        console.log(`⚔️ Игрок ${playerId} нанес ${damage} урона боссу (осталось HP: ${newHp}/${raid.boss_hp})`);
+        
+        // Проверяем, побежден ли босс
+        if (newHp <= 0) {
+          completeRaid(raidId, (err, results) => {
+            callback(null, {
+              damage,
+              bossDefeated: true,
+              results,
+              abilityMessage
+            });
+          });
+        } else {
+          // Проверяем, является ли босс Абаддоном и применяем механику оглушения
+          if (raid.boss_name === 'Абаддон') {
+            // Случайно выбираем игрока для оглушения (30-60 секунд между оглушениями)
+            const shouldStun = Math.random() < 0.15; // 15% шанс оглушить кого-то
+            
+            if (shouldStun) {
+              // Получаем всех участников рейда с их username
+              db.all(`SELECT rp.user_id, p.username FROM raid_participants rp
+                      LEFT JOIN players p ON rp.user_id = p.user_id
+                      WHERE rp.raid_id = ?`, [raidId], (err, participants) => {
+                if (err || !participants || participants.length === 0) {
+                  return callback(null, {
+                    damage,
+                    bossDefeated: false,
+                    currentHp: newHp,
+                    maxHp: raid.boss_hp,
+                    abilityMessage
+                  });
+                }
+                
+                // Выбираем случайного игрока
+                const randomParticipant = participants[Math.floor(Math.random() * participants.length)];
+                const stunDuration = 5; // 5 секунд оглушения
+                const stunUntil = new Date(Date.now() + stunDuration * 1000);
+                
+                // Сначала удаляем старые оглушения этого игрока (если есть)
+                db.run(`DELETE FROM raid_stunned_players WHERE raid_id = ? AND user_id = ?`,
+                  [raidId, randomParticipant.user_id], (err) => {
+                    if (err) console.error('Ошибка удаления старого оглушения:', err);
+                    
+                    // Добавляем новое оглушение
+                    db.run(`INSERT INTO raid_stunned_players (raid_id, user_id, stunned_until)
+                            VALUES (?, ?, ?)`,
+                      [raidId, randomParticipant.user_id, stunUntil.toISOString()], (err) => {
+                        if (err) {
+                          console.error('Ошибка добавления оглушения:', err);
+                        } else {
+                          console.log(`🌪️ Абаддон оглушил игрока ${randomParticipant.user_id} (${randomParticipant.username}) на ${stunDuration} секунд`);
+                        }
+                        
+                        callback(null, {
+                          damage,
+                          bossDefeated: false,
+                          currentHp: newHp,
+                          maxHp: raid.boss_hp,
+                          stunned_player_id: randomParticipant.user_id,
+                          stunned_player_name: randomParticipant.username,
+                          abilityMessage
+                        });
+                      });
+                  });
+              });
+            } else {
               callback(null, {
                 damage,
-                bossDefeated: true,
-                results
+                bossDefeated: false,
+                currentHp: newHp,
+                maxHp: raid.boss_hp,
+                abilityMessage
               });
-            });
+            }
           } else {
             callback(null, {
               damage,
               bossDefeated: false,
               currentHp: newHp,
-              maxHp: raid.boss_hp
+              maxHp: raid.boss_hp,
+              abilityMessage
             });
           }
-        });
-    });
+        }
+      });
   });
 }
 
 // Завершить рейд (босс побежден)
 function completeRaid(raidId, callback) {
   console.log(`🏆 Завершение рейда ${raidId}...`);
+  
+  // Очищаем оглушения для этого рейда
+  db.run(`DELETE FROM raid_stunned_players WHERE raid_id = ?`, [raidId], (err) => {
+    if (err) console.error('Ошибка очистки оглушений:', err);
+    else console.log(`✅ Оглушения рейда ${raidId} очищены`);
+  });
   
   // Получаем информацию о рейде и боссе
   db.get(`SELECT ar.*, rb.special_rewards, rb.cooldown_hours 
@@ -934,7 +1154,6 @@ function completeRaid(raidId, callback) {
             ORDER BY rp.damage_dealt DESC`,
       [raidId], (err, participants) => {
         if (err) return callback(err);
-        
         const totalDamage = participants.reduce((sum, p) => sum + p.damage_dealt, 0);
         const rewards = JSON.parse(raid.rewards);
         
@@ -984,7 +1203,7 @@ function completeRaid(raidId, callback) {
               
               if (specialRewards.top_1_guaranteed_item) {
                 const itemName = specialRewards.top_1_guaranteed_item;
-                console.log(`🔍 Ищем предмет "${itemName}" в базе данных...`);
+                console.log(`🔍 Ищем предмет "${itemName}" в базе данных...`); 
                 
                 // Выдаем предмет топ-1 игроку
                 db.get(`SELECT * FROM items WHERE name = ?`, [itemName], (err, item) => {
@@ -1480,7 +1699,7 @@ function hasPlayerAchievement(playerId, bossName, callback) {
     });
 }
 
-// Админская функция: ускорить кулдаун босса (установить 1 минуту до готовности)
+// Админская функция: ускорить кулдаун босса (установить 10 минут до готовности)
 function speedupBossCooldown(bossName, callback) {
   console.log(`⚡ Админ ускоряет кулдаун босса "${bossName}"`);
   
@@ -1508,9 +1727,9 @@ function speedupBossCooldown(bossName, callback) {
       const cooldownHours = boss.cooldown_hours || 2;
       const cooldownMs = cooldownHours * 60 * 60 * 1000;
       
-      // Вычисляем новое время completed_at так, чтобы до готовности осталась 1 минута
+      // Вычисляем новое время completed_at так, чтобы до готовности осталось 10 минут
       const now = new Date();
-      const newCompletedAt = new Date(now.getTime() - cooldownMs + 60 * 1000); // -кулдаун +1 минута
+      const newCompletedAt = new Date(now.getTime() - cooldownMs + 10 * 60 * 1000); // -кулдаун +10 минут
       
       // Обновляем время завершения последнего рейда
       db.run(`UPDATE raid_history SET completed_at = ? WHERE id = ?`,
@@ -1520,9 +1739,9 @@ function speedupBossCooldown(bossName, callback) {
             return callback(err);
           }
           
-          console.log(`✅ Кулдаун босса "${bossName}" ускорен. Рейд будет создан через 1 минуту`);
+          console.log(`✅ Кулдаун босса "${bossName}" ускорен. Рейд будет создан через 10 минут`);
           
-          // Планируем автоматическое создание рейда через 1 минуту
+          // Планируем автоматическое создание рейда через 10 минут
           setTimeout(() => {
             console.log(`🔔 Время истекло! Создаем рейд с боссом "${bossName}"...`);
             
@@ -1536,12 +1755,12 @@ function speedupBossCooldown(bossName, callback) {
               console.log(`🎉 Автоматически создан рейд после ускорения: ${newRaid.name}`);
               notifyPlayersAboutNewRaid(newRaid);
             });
-          }, 60 * 1000); // 1 минута
+          }, 10 * 60 * 1000); // 10 минут
           
           callback(null, {
             boss_name: bossName,
             cooldown_hours: cooldownHours,
-            ready_in_seconds: 60
+            ready_in_seconds: 600
           });
         });
     });

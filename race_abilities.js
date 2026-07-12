@@ -172,12 +172,12 @@ function applyRaceAbility(attacker, defender, attackResult, battleContext) {
     }
   }
   
-  // Лич - Темная магия: +35% к магическому урону
-  else if (ability.includes('темная магия') || ability.includes('к магическому урону')) {
+  // Лич - Некромантия: 18% шанс призыва мертвых союзников (+25% урона)
+  else if (ability.includes('некромантия') || ability.includes('призыв мертвых') || ability.includes('темная магия')) {
     if (Math.random() < 0.18) {
-      attackResult.damage = Math.floor(attackResult.damage * 1.35);
+      attackResult.damage = Math.floor(attackResult.damage * 1.25);
       abilityTriggered = true;
-      abilityMessage = `💀 Темная магия! +35% урона!`;
+      abilityMessage = `💀 Некромантия! Мертвые союзники помогают! +25% урона!`;
     }
   }
   
@@ -203,15 +203,15 @@ function applyRaceAbility(attacker, defender, attackResult, battleContext) {
 
 // Применить защитные способности при получении урона
 function applyDefensiveAbility(defender, incomingDamage, battleContext) {
-  if (!defender.specialAbility) return incomingDamage;
+  if (!defender.specialAbility) return { damage: incomingDamage, abilityMessage: '' };
   
   const ability = defender.specialAbility.toLowerCase();
   let damageReduction = 0;
   let abilityMessage = '';
   
-  // Дварф - Стойкость: +15% к защите
+  // Дварф - Стойкость: 30% шанс -15% урона
   if (ability.includes('стойкость')) {
-    if (Math.random() < 0.30) { // 30% шанс
+    if (Math.random() < 0.30) {
       damageReduction = Math.floor(incomingDamage * 0.15);
       abilityMessage = `🛡️ Стойкость дварфа! -${damageReduction} урона`;
       console.log(`[DWARF] Стойкость сработала: входящий урон=${incomingDamage}, снижение=${damageReduction}`);
@@ -220,11 +220,6 @@ function applyDefensiveAbility(defender, incomingDamage, battleContext) {
   
   // Бог Войны - проверка неуязвимости
   if (battleContext && battleContext.godShield > 0) {
-    console.log('[GOD_SHIELD] Проверка щита защищающегося:', {
-      godShield: battleContext.godShield,
-      incomingDamage: incomingDamage,
-      defenderAbility: defender.specialAbility
-    });
     damageReduction = incomingDamage;
     abilityMessage = `⚔️ Неуязвимость! Урон заблокирован! (${battleContext.godShield} хода осталось)`;
     battleContext.godShield--;
@@ -237,16 +232,16 @@ function applyDefensiveAbility(defender, incomingDamage, battleContext) {
     battleContext.geniShield--;
   }
   
-  // Ангел - Божественная защита: +15% к защите
-  else if (ability.includes('божественная защита') || ability.includes('к защите')) {
-    if (Math.random() < 0.25) { // 25% шанс
+  // Ангел - Божественная защита: 25% шанс -15% урона (только для Ангела!)
+  else if (ability.includes('божественная защита')) {
+    if (Math.random() < 0.25) {
       damageReduction = Math.floor(incomingDamage * 0.15);
       abilityMessage = `✨ Божественная защита! -${damageReduction} урона`;
     }
   }
   
   // Нежить - дополнительная защита
-  else if (defender.specialAbility && defender.specialAbility.toLowerCase().includes('нежизнь')) {
+  else if (ability.includes('нежизнь')) {
     if (Math.random() < 0.20) {
       damageReduction = Math.floor(incomingDamage * 0.20);
       abilityMessage = `💀 Нежизнь! Сопротивление урону!`;
@@ -397,8 +392,8 @@ function applyItemEffects(player, itemEffects, battleContext) {
 }
 
 // Модифицировать урон с учетом эффектов предметов
-function modifyDamageWithItems(damage, itemEffects, isAttacker) {
-  if (!itemEffects || itemEffects.length === 0) return damage;
+function modifyDamageWithItems(damage, itemEffects, isAttacker, damageType = null) {
+  if (!itemEffects || itemEffects.length === 0) return { damage, message: null };
   
   let modifiedDamage = damage;
   let messages = [];
@@ -462,6 +457,21 @@ function modifyDamageWithItems(damage, itemEffects, isAttacker) {
           modifiedDamage = Math.floor(modifiedDamage * 0.5);
           messages.push(`🛡️ Блок! -50% урона`);
         }
+      }
+      
+      // Сопротивление огню (fire_resist_20, fire_resist_30) - только при огненном уроне
+      if (effect.includes('fire_resist_') && (damageType === 'fire' || damageType === null)) {
+        const resist = parseInt(effect.split('_')[2]) || 20;
+        modifiedDamage = Math.floor(modifiedDamage * (1 - resist / 100));
+        if (damageType === 'fire') {
+          messages.push(`🔥 Сопротивление огню: -${resist}% урона`);
+        }
+      }
+      
+      // Иммунитет к огню (fire_immunity) - только при огненном уроне
+      if (effect === 'fire_immunity' && damageType === 'fire') {
+        modifiedDamage = 0;
+        messages.push(`🔥 Иммунитет к огню! Урон заблокирован!`);
       }
     }
   });

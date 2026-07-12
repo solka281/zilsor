@@ -732,9 +732,14 @@ function playerTurn(userId, action) {
       
       let finalDamage = defenseResult.damage;
       
+      // Определяем тип урона (огонь если у атакующего fire_element или fire_damage)
+      const attackDamageType = (battle.playerStats.itemEffects || []).some(e => 
+        e && (e.includes('fire_element') || e.includes('fire_damage'))
+      ) ? 'fire' : null;
+      
       // Применяем модификацию урона от рун (защита врага)
       if (battle.enemy.itemEffects && battle.enemy.itemEffects.length > 0) {
-        const runeResult = raceAbilities.modifyDamageWithItems(finalDamage, battle.enemy.itemEffects, false);
+        const runeResult = raceAbilities.modifyDamageWithItems(finalDamage, battle.enemy.itemEffects, false, attackDamageType);
         finalDamage = runeResult.damage;
         if (runeResult.message) {
           attackResult.abilityMessage = (attackResult.abilityMessage || '') + '\n' + runeResult.message;
@@ -855,9 +860,14 @@ function playerTurn(userId, action) {
     
     let damage = defenseResult.damage;
     
+    // Определяем тип урона врага (огонь если у врага fire_element или fire_damage)
+    const enemyDamageType = (battle.enemy.itemEffects || []).some(e => 
+      e && (e.includes('fire_element') || e.includes('fire_damage'))
+    ) ? 'fire' : null;
+    
     // Применяем модификацию урона от рун игрока (защита)
     if (battle.playerStats.itemEffects && battle.playerStats.itemEffects.length > 0) {
-      const runeResult = raceAbilities.modifyDamageWithItems(damage, battle.playerStats.itemEffects, false);
+      const runeResult = raceAbilities.modifyDamageWithItems(damage, battle.playerStats.itemEffects, false, enemyDamageType);
       damage = runeResult.damage;
       if (runeResult.message) {
         enemyAttack.abilityMessage = (enemyAttack.abilityMessage || '') + '\n' + runeResult.message;

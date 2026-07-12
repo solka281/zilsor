@@ -514,24 +514,65 @@ function displayMySalesItems(items) {
 }
 
 function createSaleItemCard(item) {
+    if (item.type === 'currency') {
+        const currencyIcon = item.currency_type === 'gold' ? '💰' : '💎';
+        const currencyName = item.currency_type === 'gold' ? 'Золото' : 'Кристаллы';
+        return `
+            <div class="item-card">
+                <div class="item-header">
+                    <div>
+                        <div class="item-name">${currencyIcon} ${currencyName}</div>
+                        <div class="item-type">Количество: ${item.amount.toLocaleString()}</div>
+                    </div>
+                    <div class="item-rarity COMMON">ВАЛЮТА</div>
+                </div>
+                <div class="item-price">
+                    <span class="price-amount">${item.price_currency === 'gold' ? '💰' : '💎'} ${item.total_price.toLocaleString()}</span>
+                    <button class="btn btn-danger btn-small" onclick="removeSale(${item.id}, 'currency')">Снять</button>
+                </div>
+            </div>
+        `;
+    }
+    
+    if (item.type === 'auction') {
+        const endsAt = new Date(item.ends_at);
+        const timeLeft = Math.max(0, Math.floor((endsAt - new Date()) / 1000 / 60));
+        return `
+            <div class="item-card">
+                <div class="item-header">
+                    <div>
+                        <div class="item-name">${item.item_name} ⚡ Аукцион</div>
+                        <div class="item-type">${getItemTypeIcon(item.item_slot)} ${getItemTypeName(item.item_slot)}</div>
+                    </div>
+                    <div class="item-rarity ${item.item_rarity}">${item.item_rarity}</div>
+                </div>
+                <div class="item-price">
+                    <span class="price-amount">${item.currency === 'gold' ? '💰' : '💎'} ${item.current_bid.toLocaleString()} | ⏰ ${timeLeft} мин</span>
+                    <button class="btn btn-danger btn-small" onclick="removeSale(${item.id}, 'auction')">Снять</button>
+                </div>
+            </div>
+        `;
+    }
+    
+    // Обычный предмет
     return `
         <div class="item-card">
             <div class="item-header">
                 <div>
                     <div class="item-name">${item.item_name}</div>
-                    <div class="item-type">${getItemTypeIcon(item.type)} ${getItemTypeName(item.type)}</div>
+                    <div class="item-type">${getItemTypeIcon(item.item_slot)} ${getItemTypeName(item.item_slot)}</div>
                 </div>
                 <div class="item-rarity ${item.item_rarity}">${item.item_rarity}</div>
             </div>
             <div class="item-price">
                 <span class="price-amount">${item.currency === 'gold' ? '💰' : '💎'} ${item.price.toLocaleString()}</span>
-                <button class="btn btn-danger btn-small" onclick="removeSale(${item.id})">Снять</button>
+                <button class="btn btn-danger btn-small" onclick="removeSale(${item.id}, 'item')">Снять</button>
             </div>
         </div>
     `;
 }
 
-async function removeSale(itemId) {
+async function removeSale(itemId, type = 'item') {
     try {
         const user = tg.initDataUnsafe?.user;
         if (!user) {
@@ -542,15 +583,16 @@ async function removeSale(itemId) {
         const response = await fetch(`${API_BASE}/remove-sale`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: user.id, saleId: itemId, type: 'item' })
+            body: JSON.stringify({ userId: user.id, saleId: itemId, type: type })
         });
         
         const result = await response.json();
         
         if (response.ok && result.success) {
-            showNotification(result.message || 'Предмет снят с продажи');
+            showNotification(result.message || 'Снято с продажи');
             await loadMySalesData();
             await loadMarketplaceData();
+            await loadUserData();
         } else {
             showNotification(result.message || 'Ошибка снятия с продажи', 'error');
         }
@@ -625,12 +667,19 @@ function createHistoryItem(item) {
 function filterHistoryItems() {
     const filter = document.getElementById('history-filter').value;
     
-    let filteredItems = historyItems;
-    
-    if (filter !== 'all') {
-        filteredItems = historyItems.filter(item => item.type === filter.replace('es', ''));
+    if (filter === 'all') {
+        displayHistoryItems(historyItems);
+        return;
     }
     
+    // purchases -> purchase, sales -> sale
+    const typeMap = {
+        'purchases': 'purchase',
+        'sales': 'sale'
+    };
+    
+    const filterType = typeMap[filter] || filter;
+    const filteredItems = historyItems.filter(item => item.type === filterType);
     displayHistoryItems(filteredItems);
 }
 
