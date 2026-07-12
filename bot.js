@@ -1412,7 +1412,6 @@ function checkLevelUp(playerId) {
 // Главное меню
 function getMainMenu(hasRace = true) {
   const buttons = [];
-  const marketUrl = `${config.SERVER_URL}/marketplace`;
   
   if (!hasRace) {
     buttons.push([
@@ -1434,9 +1433,6 @@ function getMainMenu(hasRace = true) {
     buttons.push([
       { text: '🐉 Рейды', callback_data: 'raids_menu' },
       { text: '🛒 Магазин', callback_data: 'shop' }
-    ]);
-    buttons.push([
-      { text: '🏪 Маркетплейс', web_app: { url: marketUrl } }
     ]);
   }
   
@@ -5126,7 +5122,7 @@ bot.on('callback_query', async (query) => {
       });
       break;
       
-    case 'shop_donate':
+    case 'shop_donate': {
       getOrCreatePlayer(userId, query.from.username, (err, player) => {
         if (err) return bot.answerCallbackQuery(query.id);
 
@@ -5153,21 +5149,11 @@ bot.on('callback_query', async (query) => {
             parse_mode: 'Markdown',
             reply_markup: {
               inline_keyboard: [
-                [
-                  { text: '💎 100 кристаллов (50 ⭐)', callback_data: 'buy_crystals_100' },
-                ],
-                [
-                  { text: '💎 250 кристаллов (100 ⭐)', callback_data: 'buy_crystals_250' },
-                ],
-                [
-                  { text: '💎 700 кристаллов (250 ⭐)', callback_data: 'buy_crystals_700' },
-                ],
-                [
-                  { text: '👑 VIP 30 дней (150 ⭐)', callback_data: 'buy_vip_30' },
-                ],
-                [
-                  { text: '⏰ Сброс кулдаунов (30 ⭐)', callback_data: 'buy_reset_cd' },
-                ],
+                [{ text: '💎 100 кристаллов (50 ⭐)', callback_data: 'buy_crystals_100' }],
+                [{ text: '💎 250 кристаллов (100 ⭐)', callback_data: 'buy_crystals_250' }],
+                [{ text: '💎 700 кристаллов (250 ⭐)', callback_data: 'buy_crystals_700' }],
+                [{ text: '👑 VIP 30 дней (150 ⭐)', callback_data: 'buy_vip_30' }],
+                [{ text: '⏰ Сброс кулдаунов (30 ⭐)', callback_data: 'buy_reset_cd' }],
                 [{ text: '🔙 Назад', callback_data: 'shop' }]
               ]
             }
@@ -5175,6 +5161,7 @@ bot.on('callback_query', async (query) => {
         );
       });
       break;
+    }
 
     // ===== ПОКУПКА КРИСТАЛЛОВ =====
     case 'buy_crystals_100':
