@@ -46,6 +46,11 @@ app.use('/api/marketplace', marketplaceAPI.router);
 const wikiAPI = require('./wiki_api');
 app.use('/api/wiki', wikiAPI);
 
+// API рулетки
+const rouletteAPI = require('./roulette_api');
+app.use('/api/roulette', rouletteAPI.router);
+rouletteAPI.initRouletteDB();
+
 // Главная страница для проверки
 app.get('/', (req, res) => {
   res.send(`
@@ -55,6 +60,7 @@ app.get('/', (req, res) => {
     <div style="margin: 20px 0;">
       <a href="/marketplace" style="display: inline-block; margin: 10px; padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px;">🏪 Маркетплейс</a>
       <a href="/wiki" style="display: inline-block; margin: 10px; padding: 10px 20px; background: #6f42c1; color: white; text-decoration: none; border-radius: 5px;">📚 Wiki энциклопедия</a>
+      <a href="/roulette" style="display: inline-block; margin: 10px; padding: 10px 20px; background: #e74c3c; color: white; text-decoration: none; border-radius: 5px;">🎰 Рулетка</a>
     </div>
   `);
 });
@@ -68,6 +74,12 @@ app.get('/health', (req, res) => {
 app.get('/marketplace', (req, res) => {
   res.sendFile(__dirname + '/marketplace/index.html');
 });
+
+// Рулетка
+app.get('/roulette', (req, res) => {
+  res.sendFile(__dirname + '/roulette/index.html');
+});
+app.use('/roulette', express.static('roulette'));
 
 // Wiki энциклопедия
 app.get('/wiki', (req, res) => {

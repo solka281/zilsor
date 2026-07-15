@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>🎰 Рулетка — Zilsor Race</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="app">
+        <header class="header">
+            <h1>🎰 Рулетка</h1>
+            <div class="user-balance">
+                <span id="gold-balance">💰 0</span>
+                <span id="crystal-balance">💎 0</span>
+            </div>
+        </header>
+
+        <!-- РУЛЕТКА -->
+        <div class="roulette-section">
+            <div class="roulette-container">
+                <div class="roulette-arrow">▼</div>
+                <div class="roulette-track-wrap">
+                    <div id="roulette-track" class="roulette-track"></div>
+                </div>
+            </div>
+            <div id="room-status" class="room-status">Ожидание игроков...</div>
+        </div>
+
+        <!-- ИГРОКИ В КОМНАТЕ -->
+        <div class="players-section">
+            <div class="section-header">
+                <span>👥 Игроки</span>
+                <span id="players-count">0 / ∞</span>
+            </div>
+            <div id="players-list" class="players-list"></div>
+        </div>
+
+        <!-- СДЕЛАТЬ СТАВКУ -->
+        <div class="bet-section">
+            <div class="section-header">💸 Ваша ставка</div>
+            <div class="bet-inputs">
+                <div class="bet-input-row">
+                    <label>💰 Золото</label>
+                    <div class="input-with-btns">
+                        <button class="quick-btn" onclick="setGold(100)">100</button>
+                        <button class="quick-btn" onclick="setGold(500)">500</button>
+                        <button class="quick-btn" onclick="setGold(1000)">1K</button>
+                        <button class="quick-btn all-btn" onclick="setAllGold()">MAX</button>
+                        <input type="number" id="gold-input" placeholder="0" min="0">
+                    </div>
+                </div>
+                <div class="bet-input-row">
+                    <label>💎 Кристаллы</label>
+                    <div class="input-with-btns">
+                        <button class="quick-btn" onclick="setCrystals(5)">5</button>
+                        <button class="quick-btn" onclick="setCrystals(10)">10</button>
+                        <button class="quick-btn" onclick="setCrystals(50)">50</button>
+                        <button class="quick-btn all-btn" onclick="setAllCrystals()">MAX</button>
+                        <input type="number" id="crystals-input" placeholder="0" min="0">
+                    </div>
+                </div>
+            </div>
+
+            <!-- ПРЕДМЕТЫ -->
+            <div class="items-bet-section">
+                <div class="section-header">🎒 Предметы в ставку</div>
+                <div id="inventory-list" class="inventory-list">
+                    <div class="loading">Загрузка инвентаря...</div>
+                </div>
+            </div>
+
+            <div class="bet-total">
+                Ценность ставки: <span id="bet-total-value">0</span>
+                <span class="bet-chance" id="bet-chance"></span>
+            </div>
+
+            <button id="bet-btn" class="spin-btn" onclick="placeBet()">🎲 Поставить</button>
+            <button id="spin-btn" class="spin-btn spin-btn-go" onclick="spinRoulette()" style="display:none">🎰 КРУТИТЬ!</button>
+        </div>
+
+        <!-- ИСТОРИЯ -->
+        <div class="history-section">
+            <div class="section-header">📋 Последние игры</div>
+            <div id="history-list" class="history-list"></div>
+        </div>
+
+        <!-- МОДАЛКА РЕЗУЛЬТАТА -->
+        <div id="result-modal" class="modal" style="display:none">
+            <div class="modal-content">
+                <div id="result-content"></div>
+                <button class="spin-btn" onclick="closeResult()">Новая игра</button>
+            </div>
+        </div>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
