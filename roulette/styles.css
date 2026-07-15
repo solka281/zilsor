@@ -1,283 +1,277 @@
-* { margin: 0; padding: 0; box-sizing: border-box; }
+/* ── RESET & BASE ─────────────────────────────────────────────────────────── */
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 
-body {
-    background: #0f0f1a;
-    color: #e0e0e0;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    min-height: 100vh;
-    padding-bottom: 30px;
+:root{
+  --bg:       #0b0b17;
+  --bg2:      #12122a;
+  --bg3:      #1a1a38;
+  --border:   rgba(255,255,255,0.08);
+  --gold:     #f1c40f;
+  --green:    #2ecc71;
+  --red:      #e74c3c;
+  --text:     #e8e8f0;
+  --muted:    #6b6b8a;
+  --radius:   14px;
 }
 
-.header {
-    background: linear-gradient(135deg, #1a1a2e, #16213e);
-    padding: 12px 16px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    border-bottom: 1px solid #2a2a4a;
-    position: sticky;
-    top: 0;
-    z-index: 100;
+html{font-size:14px}
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  min-height:100vh;
+  padding-bottom:40px;
+  -webkit-tap-highlight-color:transparent;
 }
 
-.header h1 { font-size: 18px; font-weight: 700; }
+/* ── HEADER ──────────────────────────────────────────────────────────────── */
+.header{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding:10px 14px;
+  background:linear-gradient(135deg,#0d0d20,#1a0a2e);
+  border-bottom:1px solid var(--border);
+  position:sticky;top:0;z-index:50;
+}
+.header-left{display:flex;align-items:center;gap:10px}
+.back-btn{
+  color:#8888bb;font-size:18px;text-decoration:none;
+  width:32px;height:32px;display:flex;align-items:center;justify-content:center;
+  border-radius:8px;background:rgba(255,255,255,0.06);
+}
+h1{font-size:17px;font-weight:700;
+  background:linear-gradient(90deg,#f1c40f,#e67e22);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent}
 
-.user-balance { display: flex; gap: 12px; font-size: 13px; }
-.user-balance span {
-    background: rgba(255,255,255,0.08);
-    padding: 4px 10px;
-    border-radius: 20px;
+.balances{display:flex;gap:8px;font-size:12px}
+.balances span{
+  background:rgba(255,255,255,0.07);
+  border:1px solid var(--border);
+  padding:4px 10px;border-radius:20px;font-weight:600;
 }
 
-/* ===== РУЛЕТКА ===== */
-.roulette-section {
-    padding: 16px;
-    background: #12122a;
-    border-bottom: 1px solid #2a2a4a;
+/* ── TRACK ───────────────────────────────────────────────────────────────── */
+.roulette-wrap{
+  padding:16px 12px 10px;
+  background:linear-gradient(180deg,#0d0d22 0%,#12122a 100%);
+  border-bottom:1px solid var(--border);
+}
+.track-pointer{
+  text-align:center;font-size:22px;color:var(--gold);
+  line-height:1;margin-bottom:3px;
+  filter:drop-shadow(0 0 8px var(--gold));
+}
+.track-outer{
+  overflow:hidden;height:60px;border-radius:12px;
+  border:2px solid var(--gold);
+  box-shadow:0 0 24px rgba(241,196,15,0.25),inset 0 0 8px rgba(0,0,0,0.4);
+  background:#0b0b17;
+}
+.track-inner{
+  display:flex;height:100%;
+  will-change:transform;
+}
+.seg{
+  flex-shrink:0;height:100%;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  font-size:10px;font-weight:700;color:#fff;
+  text-shadow:0 1px 4px rgba(0,0,0,0.9);
+  border-right:1px solid rgba(0,0,0,0.25);
+  padding:0 3px;text-align:center;line-height:1.25;
+  overflow:hidden;
+}
+.seg-empty{
+  width:100%!important;background:#1a1a38!important;
+  color:var(--muted);font-size:12px;
 }
 
-.roulette-container {
-    position: relative;
-    margin-bottom: 10px;
+.room-status{
+  text-align:center;font-size:12px;color:var(--muted);margin-top:8px;
+  transition:color .3s;
+}
+.room-status.ready{color:var(--green);font-weight:600}
+
+/* ── CARDS ───────────────────────────────────────────────────────────────── */
+.card{
+  margin:10px 10px 0;
+  background:var(--bg2);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  overflow:hidden;
+}
+.card-head{
+  padding:9px 14px;
+  background:rgba(255,255,255,0.04);
+  font-size:12px;font-weight:600;color:var(--muted);
+  letter-spacing:.3px;text-transform:uppercase;
+  display:flex;justify-content:space-between;align-items:center;
+  border-bottom:1px solid var(--border);
+}
+.badge{
+  background:rgba(255,255,255,0.1);
+  padding:2px 8px;border-radius:20px;
+  font-size:11px;font-weight:700;color:var(--text);
 }
 
-.roulette-arrow {
-    text-align: center;
-    font-size: 20px;
-    color: #f1c40f;
-    line-height: 1;
-    margin-bottom: 2px;
-    filter: drop-shadow(0 0 6px #f1c40f);
+/* ── PLAYERS ─────────────────────────────────────────────────────────────── */
+.players-list{padding:8px;display:flex;flex-direction:column;gap:6px}
+
+.player-row{
+  display:flex;align-items:center;gap:10px;
+  padding:9px 10px;border-radius:10px;
+  background:rgba(255,255,255,0.03);
+  border:1px solid transparent;
+  transition:border-color .2s;
+}
+.player-row.is-me{border-color:rgba(241,196,15,0.3);background:rgba(241,196,15,0.04)}
+
+.pcolor{width:12px;height:32px;border-radius:4px;flex-shrink:0}
+.pinfo{flex:1;min-width:0}
+.pname{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pdetail{font-size:11px;color:var(--muted);margin-top:2px}
+.pchance{
+  font-size:12px;font-weight:700;color:#fff;
+  padding:4px 9px;border-radius:20px;white-space:nowrap;
+  text-shadow:0 1px 3px rgba(0,0,0,0.5);
 }
 
-.roulette-track-wrap {
-    overflow: hidden;
-    height: 56px;
-    border-radius: 10px;
-    border: 2px solid #f1c40f;
-    box-shadow: 0 0 16px rgba(241,196,15,0.3);
-    background: #1a1a2e;
+/* ── BET FORM ─────────────────────────────────────────────────────────────── */
+.already-bet{
+  margin:10px 12px;padding:10px 14px;
+  background:rgba(46,204,113,0.1);border:1px solid rgba(46,204,113,0.3);
+  border-radius:10px;font-size:13px;color:var(--green);text-align:center;
 }
 
-.roulette-track {
-    display: flex;
-    height: 100%;
-    transition: transform 5s cubic-bezier(0.17, 0.67, 0.12, 0.99);
-    will-change: transform;
+.bet-row{padding:10px 12px 0}
+.bet-row label{font-size:11px;color:var(--muted);font-weight:600;
+  text-transform:uppercase;letter-spacing:.3px;display:block;margin-bottom:6px}
+.bet-row-inner{display:flex;gap:5px;align-items:center}
+
+.qb{
+  background:rgba(255,255,255,0.07);border:1px solid var(--border);
+  color:var(--text);padding:6px 8px;border-radius:8px;
+  font-size:11px;cursor:pointer;white-space:nowrap;
+  transition:background .15s;
+}
+.qb:active{background:rgba(255,255,255,0.14)}
+.qb-max{background:rgba(241,196,15,0.12);border-color:rgba(241,196,15,0.25);color:var(--gold)}
+
+.bet-row-inner input{
+  flex:1;min-width:0;
+  background:rgba(255,255,255,0.06);border:1px solid var(--border);
+  color:var(--text);padding:7px 10px;border-radius:8px;
+  font-size:14px;text-align:right;
+}
+.bet-row-inner input:focus{outline:none;border-color:rgba(241,196,15,0.4)}
+
+/* ── INVENTORY GRID ──────────────────────────────────────────────────────── */
+.inv-grid{
+  padding:8px;
+  display:grid;grid-template-columns:1fr 1fr;gap:6px;
+  max-height:180px;overflow-y:auto;
+}
+.inv-card{
+  background:rgba(255,255,255,0.04);border:1px solid var(--border);
+  border-radius:9px;padding:8px;cursor:pointer;
+  transition:all .15s;position:relative;
+}
+.inv-card:active{opacity:.75}
+.inv-card.selected{border-color:var(--gold);background:rgba(241,196,15,0.09)}
+.inv-check{
+  display:none;position:absolute;top:5px;right:6px;
+  font-size:12px;color:var(--gold);font-weight:700;
+}
+.inv-card.selected .inv-check{display:block}
+.inv-name{font-size:11px;font-weight:600;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.inv-val{font-size:10px;color:var(--muted);margin-top:3px}
+
+/* ── BET FOOTER ──────────────────────────────────────────────────────────── */
+.bet-footer{padding:10px 12px 4px}
+.bet-total-row{
+  display:flex;align-items:center;gap:6px;
+  font-size:13px;color:var(--muted);margin-bottom:10px;
+}
+.bet-total-row strong{color:var(--text);font-size:15px}
+.chance-tag{
+  margin-left:auto;font-size:12px;font-weight:700;
+  color:var(--green);background:rgba(46,204,113,0.1);
+  padding:2px 8px;border-radius:20px;
 }
 
-.roulette-segment {
-    flex-shrink: 0;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 11px;
-    font-weight: 700;
-    color: #fff;
-    text-shadow: 0 1px 3px rgba(0,0,0,0.8);
-    border-right: 1px solid rgba(0,0,0,0.2);
-    overflow: hidden;
-    padding: 0 4px;
-    text-align: center;
-    line-height: 1.2;
+/* ── BUTTONS ─────────────────────────────────────────────────────────────── */
+.btn{
+  display:block;width:calc(100% - 24px);margin:0 12px 12px;
+  padding:13px;border:none;border-radius:11px;
+  font-size:15px;font-weight:700;cursor:pointer;
+  letter-spacing:.3px;transition:opacity .15s,transform .1s;
+}
+.btn:active{opacity:.85;transform:scale(.98)}
+.btn:disabled{opacity:.35;cursor:default;transform:none}
+
+.btn-bet{
+  background:linear-gradient(135deg,#6c3ff5,#9b59b6);
+  color:#fff;
+}
+.btn-spin{
+  background:linear-gradient(135deg,#f39c12,#e74c3c);
+  color:#fff;
+  animation:pulse 1.6s ease-in-out infinite;
+  box-shadow:0 4px 20px rgba(231,76,60,0.35);
+}
+@keyframes pulse{
+  0%,100%{box-shadow:0 4px 20px rgba(231,76,60,0.35)}
+  50%{box-shadow:0 4px 32px rgba(231,76,60,0.7)}
 }
 
-.room-status {
-    text-align: center;
-    font-size: 13px;
-    color: #aaa;
-    margin-top: 6px;
+/* ── HISTORY ─────────────────────────────────────────────────────────────── */
+.hist-row{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px;
 }
+.hist-row:last-child{border-bottom:none}
+.hist-winner{font-weight:600;color:var(--gold)}
+.hist-val{color:var(--muted)}
 
-.room-status.ready { color: #2ecc71; font-weight: 600; }
-
-/* ===== СЕКЦИИ ===== */
-.players-section, .bet-section, .history-section {
-    margin: 12px;
-    background: #1a1a2e;
-    border-radius: 12px;
-    overflow: hidden;
-    border: 1px solid #2a2a4a;
+/* ── MODAL ───────────────────────────────────────────────────────────────── */
+.modal-bg{
+  position:fixed;inset:0;background:rgba(0,0,0,0.88);
+  display:flex;align-items:center;justify-content:center;z-index:999;
+  backdrop-filter:blur(4px);
 }
-
-.section-header {
-    padding: 10px 14px;
-    background: rgba(255,255,255,0.05);
-    font-size: 13px;
-    font-weight: 600;
-    color: #aaa;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+.modal-box{
+  background:var(--bg3);border:1px solid rgba(241,196,15,0.2);
+  border-radius:20px;padding:28px 20px;text-align:center;
+  width:310px;max-width:92%;
+  box-shadow:0 0 60px rgba(241,196,15,0.15);
 }
+.winner-name{font-size:24px;font-weight:800;margin:6px 0 2px}
+.win-details{font-size:14px;line-height:2;color:var(--muted)}
 
-/* ===== ИГРОКИ ===== */
-.players-list { padding: 8px; display: flex; flex-direction: column; gap: 6px; }
-
-.player-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 8px 10px;
-    border-radius: 8px;
-    background: rgba(255,255,255,0.04);
+/* ── TOASTS ──────────────────────────────────────────────────────────────── */
+#toast-area{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:9999;
+  display:flex;flex-direction:column;gap:6px;align-items:center}
+.toast{
+  padding:9px 18px;border-radius:20px;font-size:13px;font-weight:600;
+  animation:fadeUp .25s ease;white-space:nowrap;
 }
+.toast-ok{background:#27ae60;color:#fff}
+.toast-error{background:#c0392b;color:#fff}
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 
-.player-color { width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0; }
+/* ── MISC ────────────────────────────────────────────────────────────────── */
+.empty-msg{padding:14px;text-align:center;color:var(--muted);font-size:12px}
 
-.player-info { flex: 1; }
-.player-name { font-size: 13px; font-weight: 600; }
-.player-bet-detail { font-size: 11px; color: #888; margin-top: 2px; }
+/* Редкости */
+.rarity-COMMON  {color:#aab0c0}
+.rarity-RARE    {color:#4a9eff}
+.rarity-EPIC    {color:#b06eff}
+.rarity-MYTHIC  {color:#ff5555}
+.rarity-LEGENDARY{color:#f1c40f}
+.rarity-SECRET  {color:#fff;text-shadow:0 0 6px #fff}
 
-.player-chance {
-    font-size: 12px;
-    font-weight: 700;
-    padding: 3px 8px;
-    border-radius: 12px;
-    color: #fff;
-}
-
-/* ===== СТАВКА ===== */
-.bet-inputs { padding: 10px 12px; display: flex; flex-direction: column; gap: 10px; }
-
-.bet-input-row label { font-size: 12px; color: #aaa; margin-bottom: 5px; display: block; }
-
-.input-with-btns { display: flex; gap: 5px; align-items: center; }
-
-.quick-btn {
-    background: rgba(255,255,255,0.08);
-    border: 1px solid rgba(255,255,255,0.12);
-    color: #ddd;
-    padding: 5px 8px;
-    border-radius: 6px;
-    font-size: 11px;
-    cursor: pointer;
-    white-space: nowrap;
-}
-.quick-btn:active { opacity: 0.7; }
-.all-btn { background: rgba(241,196,15,0.15); border-color: rgba(241,196,15,0.3); color: #f1c40f; }
-
-.bet-inputs input {
-    flex: 1;
-    background: rgba(255,255,255,0.06);
-    border: 1px solid rgba(255,255,255,0.15);
-    color: #fff;
-    padding: 6px 10px;
-    border-radius: 8px;
-    font-size: 14px;
-    text-align: right;
-    min-width: 0;
-}
-
-.items-bet-section { border-top: 1px solid #2a2a4a; }
-
-.inventory-list {
-    padding: 8px;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 6px;
-    max-height: 200px;
-    overflow-y: auto;
-}
-
-.inv-item {
-    background: rgba(255,255,255,0.04);
-    border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 8px;
-    padding: 7px;
-    cursor: pointer;
-    transition: all 0.15s;
-}
-.inv-item.selected {
-    border-color: #f1c40f;
-    background: rgba(241,196,15,0.12);
-}
-.inv-item.selected::after { content: ' ✓'; color: #f1c40f; }
-
-.inv-item-name { font-size: 11px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.inv-item-info { font-size: 10px; color: #888; margin-top: 2px; }
-
-.bet-total {
-    padding: 10px 14px;
-    border-top: 1px solid #2a2a4a;
-    font-size: 13px;
-    color: #aaa;
-}
-.bet-chance { margin-left: 8px; color: #2ecc71; font-weight: 600; }
-
-.spin-btn {
-    display: block;
-    width: calc(100% - 24px);
-    margin: 8px 12px;
-    padding: 13px;
-    background: linear-gradient(135deg, #f39c12, #e74c3c);
-    border: none;
-    border-radius: 10px;
-    color: #fff;
-    font-size: 15px;
-    font-weight: 700;
-    cursor: pointer;
-    letter-spacing: 0.5px;
-}
-.spin-btn:active { opacity: 0.85; transform: scale(0.98); }
-.spin-btn:disabled { opacity: 0.4; cursor: default; }
-
-.spin-btn-go {
-    background: linear-gradient(135deg, #27ae60, #2ecc71);
-    animation: pulse 1.5s infinite;
-}
-
-@keyframes pulse {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(46,204,113,0.4); }
-    50% { box-shadow: 0 0 0 8px rgba(46,204,113,0); }
-}
-
-/* ===== ИСТОРИЯ ===== */
-.history-list { padding: 8px; display: flex; flex-direction: column; gap: 6px; }
-
-.history-row {
-    display: flex;
-    justify-content: space-between;
-    padding: 7px 10px;
-    background: rgba(255,255,255,0.03);
-    border-radius: 7px;
-    font-size: 12px;
-}
-.history-winner { font-weight: 600; color: #f1c40f; }
-.history-value { color: #888; }
-
-/* ===== МОДАЛКА ===== */
-.modal {
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,0.85);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 999;
-}
-
-.modal-content {
-    background: #1a1a2e;
-    border: 1px solid #2a2a4a;
-    border-radius: 16px;
-    padding: 24px;
-    text-align: center;
-    max-width: 90%;
-    width: 320px;
-}
-
-#result-content { margin-bottom: 16px; }
-#result-content .winner-name { font-size: 22px; font-weight: 800; color: #f1c40f; margin: 10px 0; }
-#result-content .win-details { font-size: 14px; line-height: 1.8; }
-
-.loading { padding: 16px; text-align: center; color: #555; font-size: 13px; }
-
-/* Цвета редкости */
-.rarity-COMMON { color: #aaa; }
-.rarity-RARE { color: #3498db; }
-.rarity-EPIC { color: #9b59b6; }
-.rarity-MYTHIC { color: #e74c3c; }
-.rarity-LEGENDARY { color: #f39c12; }
-.rarity-SECRET { color: #fff; }
+/* Scrollbar */
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.15);border-radius:4px}

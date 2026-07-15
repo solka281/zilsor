@@ -8,92 +8,106 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <div id="app">
-        <header class="header">
+<div id="app">
+
+    <header class="header">
+        <div class="header-left">
+            <a href="/marketplace" class="back-btn">←</a>
             <h1>🎰 Рулетка</h1>
-            <div class="user-balance">
-                <span id="gold-balance">💰 0</span>
-                <span id="crystal-balance">💎 0</span>
-            </div>
-        </header>
-
-        <!-- РУЛЕТКА -->
-        <div class="roulette-section">
-            <div class="roulette-container">
-                <div class="roulette-arrow">▼</div>
-                <div class="roulette-track-wrap">
-                    <div id="roulette-track" class="roulette-track"></div>
-                </div>
-            </div>
-            <div id="room-status" class="room-status">Ожидание игроков...</div>
         </div>
-
-        <!-- ИГРОКИ В КОМНАТЕ -->
-        <div class="players-section">
-            <div class="section-header">
-                <span>👥 Игроки</span>
-                <span id="players-count">0 / ∞</span>
-            </div>
-            <div id="players-list" class="players-list"></div>
+        <div class="balances">
+            <span id="gold-balance">💰 –</span>
+            <span id="crystal-balance">💎 –</span>
         </div>
+    </header>
 
-        <!-- СДЕЛАТЬ СТАВКУ -->
-        <div class="bet-section">
-            <div class="section-header">💸 Ваша ставка</div>
-            <div class="bet-inputs">
-                <div class="bet-input-row">
-                    <label>💰 Золото</label>
-                    <div class="input-with-btns">
-                        <button class="quick-btn" onclick="setGold(100)">100</button>
-                        <button class="quick-btn" onclick="setGold(500)">500</button>
-                        <button class="quick-btn" onclick="setGold(1000)">1K</button>
-                        <button class="quick-btn all-btn" onclick="setAllGold()">MAX</button>
-                        <input type="number" id="gold-input" placeholder="0" min="0">
-                    </div>
-                </div>
-                <div class="bet-input-row">
-                    <label>💎 Кристаллы</label>
-                    <div class="input-with-btns">
-                        <button class="quick-btn" onclick="setCrystals(5)">5</button>
-                        <button class="quick-btn" onclick="setCrystals(10)">10</button>
-                        <button class="quick-btn" onclick="setCrystals(50)">50</button>
-                        <button class="quick-btn all-btn" onclick="setAllCrystals()">MAX</button>
-                        <input type="number" id="crystals-input" placeholder="0" min="0">
-                    </div>
-                </div>
-            </div>
-
-            <!-- ПРЕДМЕТЫ -->
-            <div class="items-bet-section">
-                <div class="section-header">🎒 Предметы в ставку</div>
-                <div id="inventory-list" class="inventory-list">
-                    <div class="loading">Загрузка инвентаря...</div>
-                </div>
-            </div>
-
-            <div class="bet-total">
-                Ценность ставки: <span id="bet-total-value">0</span>
-                <span class="bet-chance" id="bet-chance"></span>
-            </div>
-
-            <button id="bet-btn" class="spin-btn" onclick="placeBet()">🎲 Поставить</button>
-            <button id="spin-btn" class="spin-btn spin-btn-go" onclick="spinRoulette()" style="display:none">🎰 КРУТИТЬ!</button>
+    <!-- ТРЕК РУЛЕТКИ -->
+    <div class="roulette-wrap">
+        <div class="track-pointer">▼</div>
+        <div class="track-outer">
+            <div id="roulette-track" class="track-inner"></div>
         </div>
+        <div id="room-status" class="room-status">Загрузка...</div>
+    </div>
 
-        <!-- ИСТОРИЯ -->
-        <div class="history-section">
-            <div class="section-header">📋 Последние игры</div>
-            <div id="history-list" class="history-list"></div>
+    <!-- ИГРОКИ -->
+    <div class="card">
+        <div class="card-head">
+            <span>👥 Игроки</span>
+            <span id="players-count" class="badge">0</span>
         </div>
-
-        <!-- МОДАЛКА РЕЗУЛЬТАТА -->
-        <div id="result-modal" class="modal" style="display:none">
-            <div class="modal-content">
-                <div id="result-content"></div>
-                <button class="spin-btn" onclick="closeResult()">Новая игра</button>
-            </div>
+        <div id="players-list" class="players-list">
+            <div class="empty-msg">Загрузка...</div>
         </div>
     </div>
-    <script src="app.js"></script>
+
+    <!-- СТАВКА -->
+    <div class="card" id="bet-card">
+        <div class="card-head">💸 Ваша ставка</div>
+
+        <div id="already-bet" class="already-bet" style="display:none">
+            ✅ Ставка принята! Ждём других игроков.
+        </div>
+
+        <div id="bet-form">
+            <div class="bet-row">
+                <label>💰 Золото</label>
+                <div class="bet-row-inner">
+                    <button class="qb" onclick="setGold(100)">100</button>
+                    <button class="qb" onclick="setGold(500)">500</button>
+                    <button class="qb" onclick="setGold(1000)">1K</button>
+                    <button class="qb qb-max" onclick="setAllGold()">MAX</button>
+                    <input id="gold-input" type="number" min="0" placeholder="0">
+                </div>
+            </div>
+            <div class="bet-row">
+                <label>💎 Кристаллы</label>
+                <div class="bet-row-inner">
+                    <button class="qb" onclick="setCrystals(5)">5</button>
+                    <button class="qb" onclick="setCrystals(10)">10</button>
+                    <button class="qb" onclick="setCrystals(50)">50</button>
+                    <button class="qb qb-max" onclick="setAllCrystals()">MAX</button>
+                    <input id="crystals-input" type="number" min="0" placeholder="0">
+                </div>
+            </div>
+
+            <div class="card-head" style="margin-top:8px">🎒 Предметы</div>
+            <div id="inventory-list" class="inv-grid">
+                <div class="empty-msg">Загрузка...</div>
+            </div>
+
+            <div class="bet-footer">
+                <div class="bet-total-row">
+                    <span>Ценность:</span>
+                    <strong id="bet-total-value">0</strong>
+                    <span id="bet-chance" class="chance-tag"></span>
+                </div>
+                <button id="bet-btn" class="btn btn-bet" onclick="placeBet()">🎲 Поставить</button>
+            </div>
+        </div>
+
+        <button id="spin-btn" class="btn btn-spin" style="display:none" onclick="spinRoulette()">
+            🎰 КРУТИТЬ!
+        </button>
+    </div>
+
+    <!-- ИСТОРИЯ -->
+    <div class="card">
+        <div class="card-head">📋 История</div>
+        <div id="history-list"><div class="empty-msg">Загрузка...</div></div>
+    </div>
+
+    <!-- МОДАЛКА -->
+    <div id="result-modal" class="modal-bg" style="display:none">
+        <div class="modal-box">
+            <div id="result-content"></div>
+            <button class="btn btn-bet" onclick="closeResult()" style="margin-top:16px">Новая игра</button>
+        </div>
+    </div>
+</div>
+
+<!-- ТОСТ -->
+<div id="toast-area"></div>
+<script src="app.js"></script>
 </body>
 </html>
